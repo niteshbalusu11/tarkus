@@ -7,6 +7,7 @@ import {
   query,
 } from './_generated/server'
 import { internal } from './_generated/api'
+import { getUserProfileByTokenIdentifier } from './users'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
 import type { UserIdentity } from 'convex/server'
@@ -48,6 +49,32 @@ function displayNameFromIdentity(identity: {
   return identity.name || identity.nickname || identity.email || 'Participant'
 }
 
+async function requireProfile(
+  ctx: QueryCtx | MutationCtx,
+  identity: UserIdentity,
+) {
+  const profile = await getUserProfileByTokenIdentifier(
+    ctx,
+    identity.tokenIdentifier,
+  )
+  if (!profile) {
+    throw new Error('Onboarding required')
+  }
+  return profile
+}
+
+async function requireProfileRole(
+  ctx: QueryCtx | MutationCtx,
+  identity: UserIdentity,
+  role: 'student' | 'teacher',
+) {
+  const profile = await requireProfile(ctx, identity)
+  if (profile.role !== role) {
+    throw new Error(`Only ${role}s can use this`)
+  }
+  return profile
+}
+
 async function assertTeacherOwnsSession(
   ctx: QueryCtx | MutationCtx,
   sessionId: Id<'sessions'>,
@@ -72,8 +99,18 @@ async function assertCanAccessSession(
   if (!session || session.status === 'deleted') {
     throw new Error('Session not found')
   }
+  const profile = await getUserProfileByTokenIdentifier(ctx, tokenIdentifier)
+  if (!profile) {
+    throw new Error('Onboarding required')
+  }
   if (session.teacherTokenIdentifier === tokenIdentifier) {
+    if (profile.role !== 'teacher') {
+      throw new Error('Unauthorized')
+    }
     return { session, role: 'teacher' as const, participant: null }
+  }
+  if (profile.role !== 'student') {
+    throw new Error('Unauthorized')
   }
   const participant = await ctx.db
     .query('sessionParticipants')
@@ -98,6 +135,7 @@ export const createSession = mutation({
   args: { title: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    const profile = await requireProfileRole(ctx, identity, 'teacher')
     const now = Date.now()
     let code = makeCode()
     for (let attempts = 0; attempts < 5; attempts += 1) {
@@ -111,7 +149,7 @@ export const createSession = mutation({
 
     const sessionId = await ctx.db.insert('sessions', {
       teacherTokenIdentifier: identity.tokenIdentifier,
-      teacherName: displayNameFromIdentity(identity),
+      teacherName: profile.displayName,
       code,
       title: args.title || 'Pillars of Support Live Session',
       status: 'active',
@@ -136,6 +174,7 @@ export const listMyTeacherSessions = query({
   args: {},
   handler: async (ctx) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
     return await ctx.db
       .query('sessions')
       .withIndex('by_teacherTokenIdentifier_and_status', (q) =>
@@ -152,6 +191,7 @@ export const getTeacherSession = query({
   args: { sessionId: v.id('sessions') },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
     return await assertTeacherOwnsSession(
       ctx,
       args.sessionId,
@@ -164,6 +204,7 @@ export const joinSessionByCode = mutation({
   args: { code: v.string(), displayName: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    const profile = await requireProfileRole(ctx, identity, 'student')
     const normalizedCode = args.code.trim().toUpperCase()
     const session = await ctx.db
       .query('sessions')
@@ -202,7 +243,7 @@ export const joinSessionByCode = mutation({
       sessionId: session._id,
       studentTokenIdentifier: identity.tokenIdentifier,
       displayName:
-        args.displayName?.trim() || displayNameFromIdentity(identity) || 'Student',
+        args.displayName?.trim() || profile.displayName || 'Student',
       joinedAt: Date.now(),
       lastSeenAt: Date.now(),
     })
@@ -215,6 +256,7 @@ export const getStudentSession = query({
   args: { sessionId: v.id('sessions') },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'student')
     const access = await assertCanAccessSession(
       ctx,
       args.sessionId,
@@ -371,6 +413,7 @@ export const endSession = mutation({
   args: { sessionId: v.id('sessions') },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
     await assertTeacherOwnsSession(ctx, args.sessionId, identity.tokenIdentifier)
     await ctx.db.patch(args.sessionId, { status: 'ended', endedAt: Date.now() })
   },
@@ -380,6 +423,7 @@ export const deleteSession = mutation({
   args: { sessionId: v.id('sessions') },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
     await assertTeacherOwnsSession(ctx, args.sessionId, identity.tokenIdentifier)
     const now = Date.now()
     await ctx.db.patch(args.sessionId, {
@@ -394,6 +438,7 @@ export const seedDemoSession = mutation({
   args: { sessionId: v.id('sessions') },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
     await assertTeacherOwnsSession(ctx, args.sessionId, identity.tokenIdentifier)
     const activity = await ctx.db
       .query('activities')
@@ -564,6 +609,16 @@ export const seedDemoSession = mutation({
 export const getAnalysisInput = internalQuery({
   args: { sessionId: v.id('sessions'), teacherTokenIdentifier: v.string() },
   handler: async (ctx, args) => {
+    const profile = await getUserProfileByTokenIdentifier(
+      ctx,
+      args.teacherTokenIdentifier,
+    )
+    if (!profile) {
+      throw new Error('Onboarding required')
+    }
+    if (profile.role !== 'teacher') {
+      throw new Error('Only teachers can use this')
+    }
     const session = await assertTeacherOwnsSession(
       ctx,
       args.sessionId,

@@ -39,9 +39,12 @@ AI synthesis.
 - `src/routes/student/$sessionId.tsx`: student live class view with chat and the
   Pillars exercise.
 - `src/components/AuthGate.tsx`: Clerk and Convex auth readiness gate.
+  Also owns the required post-signup onboarding UI and route-level role gate.
 - `src/integrations/convex/provider.tsx`: Convex client and Clerk token bridge.
 - `src/lib/tarkus.ts`: shared Pillars and AI-output normalization helpers.
 - `convex/schema.ts`: source of truth for Convex tables and indexes.
+- `convex/users.ts`: Convex-backed user profile, display name, and immutable
+  student/teacher account role.
 - `convex/sessions.ts`: session, participant, chat, assessment, and AI backend
   functions.
 - `tests/convex/sessions.test.ts`: Convex auth/session behavior tests using
@@ -62,6 +65,9 @@ AI synthesis.
 - Student-visible names should come from the session participant record once the
   student has joined a class. Do not re-derive names from token claims in chat or
   assessment writes.
+- Account type is not a client-side preference. Use the Convex `users` profile
+  role for server-side authorization, and keep student-only and teacher-only
+  functions separated by backend checks.
 - Keep AI teacher-only for now. AI should synthesize, cluster, and summarize
   class signals; it should not give direct advice to students.
 - Prefer small, testable helpers over one-off logic buried inside route

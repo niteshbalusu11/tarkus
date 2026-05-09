@@ -2,10 +2,13 @@ import { defineSchema, defineTable } from 'convex/server'
 import { v } from 'convex/values'
 
 export default defineSchema({
-  todos: defineTable({
-    text: v.string(),
-    completed: v.boolean(),
-  }),
+  users: defineTable({
+    tokenIdentifier: v.string(),
+    displayName: v.string(),
+    role: v.union(v.literal('student'), v.literal('teacher')),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_tokenIdentifier', ['tokenIdentifier']),
   sessions: defineTable({
     teacherTokenIdentifier: v.string(),
     teacherName: v.optional(v.string()),

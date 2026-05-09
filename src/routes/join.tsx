@@ -14,7 +14,7 @@ export const Route = createFileRoute('/join')({
 
 function JoinRoute() {
   return (
-    <AuthGate title="Sign in to join a class">
+    <AuthGate requiredRole="student" title="Sign in to join a class">
       <JoinClass />
     </AuthGate>
   )

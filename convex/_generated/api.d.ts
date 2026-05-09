@@ -9,7 +9,7 @@
  */
 
 import type * as sessions from "../sessions.js";
-import type * as todos from "../todos.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -19,7 +19,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   sessions: typeof sessions;
-  todos: typeof todos;
+  users: typeof users;
 }>;
 
 /**

@@ -37,7 +37,7 @@ export const Route = createFileRoute('/teacher')({
 
 function TeacherRoute() {
   return (
-    <AuthGate title="Sign in as teacher">
+    <AuthGate requiredRole="teacher" title="Sign in as teacher">
       <TeacherDashboard />
     </AuthGate>
   )

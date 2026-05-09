@@ -14,7 +14,7 @@ export const Route = createFileRoute('/student/$sessionId')({
 
 function StudentRoute() {
   return (
-    <AuthGate title="Sign in to continue class">
+    <AuthGate requiredRole="student" title="Sign in to continue class">
       <StudentSession />
     </AuthGate>
   )

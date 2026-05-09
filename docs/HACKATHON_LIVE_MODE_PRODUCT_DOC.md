@@ -35,7 +35,7 @@ The demo succeeds if:
 
 ### Teacher
 
-The teacher is the primary user. For the hackathon, any signed-in user can act as a teacher. The teacher runs one live in-person class at a time.
+The teacher is the primary user. For the hackathon, a signed-in user must complete onboarding and select a teacher account before they can create or manage teacher sessions. The teacher runs one live in-person class at a time.
 
 Teacher capabilities:
 
@@ -60,7 +60,7 @@ Teacher non-goals:
 
 ### Student
 
-The student is a signed-in participant who joins with a short session code. Student identity can be lightweight. A display name may be optional, and the product should avoid forcing unnecessary personal information.
+The student is a signed-in participant with a student account who joins with a short session code. Student identity can be lightweight, but onboarding requires a display name or alias so class activity is legible to the trainer.
 
 Student capabilities:
 
@@ -94,6 +94,10 @@ The MVP assessment is Pillars of Support. The product should be modeled so futur
 
 For the hackathon, one live session maps to one short code. Codes expire. Students can join directly if they have the code.
 
+### Server-Enforced Roles
+
+Students and teachers are separated by a Convex-backed account profile, not just by frontend routes. After sign-up, onboarding asks for a display name and account type. Convex functions enforce that only teacher accounts can create/manage sessions and only student accounts can join by code or submit student activities.
+
 ### Scannable Teacher View
 
 The teacher is in front of a room and cannot read a wall of text. The dashboard should prioritize concise synthesis, visual results, and class-level patterns over raw chat.
@@ -103,15 +107,16 @@ The teacher is in front of a room and cannot read a wall of text. The dashboard 
 ### Teacher Flow
 
 1. Teacher signs in.
-2. Teacher clicks "New live session."
-3. System creates a session with:
+2. If this is their first time, teacher completes onboarding with display name and teacher account type.
+3. Teacher clicks "New live session."
+4. System creates a session with:
    - short join code
    - expiration timestamp
    - status of active
    - predefined Pillars exercise
-4. Teacher shares the code verbally or on screen.
-5. Students join.
-6. Teacher monitors:
+5. Teacher shares the code verbally or on screen.
+6. Students join.
+7. Teacher monitors:
    - live roster
    - AI synthesis
    - recurring questions
@@ -119,15 +124,16 @@ The teacher is in front of a room and cannot read a wall of text. The dashboard 
    - emotional tone
    - Pillars exercise results
    - curated chat highlights
-7. Teacher may respond in chat, though the main expectation is that they speak in person.
-8. Teacher can end or delete the session.
+8. Teacher may respond in chat, though the main expectation is that they speak in person.
+9. Teacher can end or delete the session.
 
 ### Student Flow
 
 1. Student signs in.
-2. Student enters a short session code.
-3. If code is valid and not expired, student joins.
-4. Student sees:
+2. If this is their first time, student completes onboarding with display name and student account type.
+3. Student enters a short session code.
+4. If code is valid and not expired, student joins.
+5. Student sees:
    - class chat
    - current predefined Pillars exercise
 5. Student can post text chat messages.
@@ -318,12 +324,13 @@ This is a product-level schema outline, not a final backend implementation.
 
 ### users
 
-- `clerkUserId`
-- `displayName`, optional
+- `tokenIdentifier`
+- `displayName`
 - `role`: `teacher` or `student`
 - `createdAt`
+- `updatedAt`
 
-For hackathon simplicity, role can be inferred from route/action rather than enforced with complex permissions.
+Role is selected during onboarding and enforced by Convex functions. The frontend can hide or redirect wrong-role pages, but server-side role checks are the security boundary.
 
 ### sessions
 
@@ -430,11 +437,10 @@ Indexes:
 
 ## Open Decisions
 
-1. Whether "role" should be explicitly selected during onboarding or inferred from the route used first.
-2. Whether students can edit Pillars submissions after submitting.
-3. Whether the matrix should show individual dots, aggregate dots, or both for the demo.
-4. Whether demo simulation should be visible only to teachers or hidden behind a development flag.
-5. Which OpenRouter model to use for the hackathon.
+1. Whether students can edit Pillars submissions after submitting.
+2. Whether the matrix should show individual dots, aggregate dots, or both for the demo.
+3. Whether demo simulation should be visible only to teachers or hidden behind a development flag.
+4. Which OpenRouter model to use for the hackathon.
 
 ## Recommended Build Order
 
