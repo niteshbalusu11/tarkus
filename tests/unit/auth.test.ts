@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { resolveJoinDisplayName } from './auth'
+import { resolveJoinDisplayName } from '../../src/lib/auth'
 
 describe('resolveJoinDisplayName', () => {
   it('uses the student-entered display name first', () => {

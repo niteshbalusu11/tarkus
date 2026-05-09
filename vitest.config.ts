@@ -16,7 +16,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'convex',
-          include: ['convex/**/*.test.ts'],
+          include: ['tests/convex/**/*.test.ts'],
           environment: 'edge-runtime',
         },
       },
@@ -24,7 +24,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'unit',
-          include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+          include: ['tests/unit/**/*.test.ts', 'tests/unit/**/*.test.tsx'],
           environment: 'node',
         },
       },

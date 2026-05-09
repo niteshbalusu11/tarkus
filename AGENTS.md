@@ -44,9 +44,10 @@ AI synthesis.
 - `convex/schema.ts`: source of truth for Convex tables and indexes.
 - `convex/sessions.ts`: session, participant, chat, assessment, and AI backend
   functions.
-- `convex/sessions.test.ts`: Convex auth/session behavior tests using
+- `tests/convex/sessions.test.ts`: Convex auth/session behavior tests using
   `convex-test`.
-- `convex/test.setup.ts`: Convex module glob for `convex-test`.
+- `tests/convex/test.setup.ts`: Convex module glob for `convex-test`.
+- `tests/unit/auth.test.ts`: unit tests for auth-adjacent frontend helpers.
 - `convex/auth.config.ts`: Convex auth provider configuration for Clerk JWTs.
 - `vitest.config.ts`: Vitest projects for Convex edge-runtime tests and pure
   frontend/unit tests.
