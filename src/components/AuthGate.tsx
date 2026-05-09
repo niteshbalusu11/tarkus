@@ -1,10 +1,32 @@
 import { SignIn, SignedIn, SignedOut, useUser } from '@clerk/clerk-react'
 import { Link } from '@tanstack/react-router'
 import { useConvexAuth, useMutation, useQuery } from 'convex/react'
-import * as React from 'react'
 import { GraduationCap, ShieldCheck } from 'lucide-react'
+import * as React from 'react'
 
 import { api } from '../../convex/_generated/api'
+import {
+  ONBOARDING_RETURN_TO_KEY,
+  ONBOARDING_ROLE_KEY,
+  defaultPathForRole,
+  resolvePostOnboardingPath,
+} from '../lib/auth'
+import type { AccountRole } from '../lib/auth'
+
+export function AccountOnboardingGate({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <>
+      <SignedOut>{children}</SignedOut>
+      <SignedIn>
+        <ConvexAccountGate>{children}</ConvexAccountGate>
+      </SignedIn>
+    </>
+  )
+}
 
 export default function AuthGate({
   children,
@@ -13,12 +35,12 @@ export default function AuthGate({
 }: {
   children: React.ReactNode
   title?: string
-  requiredRole?: 'student' | 'teacher'
+  requiredRole?: AccountRole
 }) {
   return (
     <>
       <SignedOut>
-        <AuthPanel title={title} />
+        <AuthPanel requiredRole={requiredRole} title={title} />
       </SignedOut>
       <SignedIn>
         <ConvexReady requiredRole={requiredRole}>{children}</ConvexReady>
@@ -27,12 +49,36 @@ export default function AuthGate({
   )
 }
 
+function ConvexAccountGate({ children }: { children: React.ReactNode }) {
+  const { isLoading, isAuthenticated } = useConvexAuth()
+  const [showDiagnostic, setShowDiagnostic] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!isLoading) {
+      setShowDiagnostic(false)
+      return
+    }
+    const timeout = window.setTimeout(() => setShowDiagnostic(true), 2500)
+    return () => window.clearTimeout(timeout)
+  }, [isLoading])
+
+  if (isAuthenticated) {
+    return <AccountGate>{children}</AccountGate>
+  }
+
+  if (isLoading && !showDiagnostic) {
+    return <LoadingState label="Connecting secure session..." />
+  }
+
+  return <ConvexDiagnostic />
+}
+
 function ConvexReady({
   children,
   requiredRole,
 }: {
   children: React.ReactNode
-  requiredRole?: 'student' | 'teacher'
+  requiredRole?: AccountRole
 }) {
   const { isLoading, isAuthenticated } = useConvexAuth()
   const [showDiagnostic, setShowDiagnostic] = React.useState(false)
@@ -51,26 +97,10 @@ function ConvexReady({
   }
 
   if (isLoading && !showDiagnostic) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">
-        Connecting secure session...
-      </div>
-    )
+    return <LoadingState label="Connecting secure session..." />
   }
 
-  return (
-    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-slate-50 px-4 py-10">
-      <section className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-xl shadow-slate-200/70">
-        <h1 className="text-xl font-semibold tracking-tight text-slate-950">
-          Convex session is still connecting
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          You are signed in with Clerk, but the backend token has not completed.
-          Try a hard refresh. If this persists, sign out and sign in again.
-        </p>
-      </section>
-    </main>
-  )
+  return <ConvexDiagnostic />
 }
 
 function AccountGate({
@@ -78,16 +108,12 @@ function AccountGate({
   requiredRole,
 }: {
   children: React.ReactNode
-  requiredRole?: 'student' | 'teacher'
+  requiredRole?: AccountRole
 }) {
   const currentUser = useQuery(api.users.getCurrentUser)
 
   if (currentUser === undefined) {
-    return (
-      <div className="flex min-h-[60vh] items-center justify-center text-sm text-slate-500">
-        Loading account...
-      </div>
-    )
+    return <LoadingState label="Loading account..." />
   }
 
   if (!currentUser.profile) {
@@ -120,7 +146,9 @@ function OnboardingPanel({
   const [displayName, setDisplayName] = React.useState(
     user?.fullName || user?.username || suggestedDisplayName,
   )
-  const [role, setRole] = React.useState<'student' | 'teacher'>('student')
+  const [role, setRole] = React.useState<AccountRole>(
+    () => getStoredOnboardingRole() || 'student',
+  )
   const [error, setError] = React.useState<string | null>(null)
   const [isSaving, setIsSaving] = React.useState(false)
 
@@ -135,29 +163,36 @@ function OnboardingPanel({
     event.preventDefault()
     setError(null)
     setIsSaving(true)
+
     try {
       await completeOnboarding({ displayName, role })
+      const nextPath = resolvePostOnboardingPath({
+        chosenRole: role,
+        pendingPath: getStoredOnboardingReturnTo(),
+        pendingRole: getStoredOnboardingRole(),
+      })
+      clearStoredOnboardingIntent()
+      window.location.assign(nextPath)
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : 'Could not save account',
       )
-    } finally {
       setIsSaving(false)
     }
   }
 
   return (
-    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-slate-50 px-4 py-10">
-      <section className="w-full max-w-xl rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-700">
+    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--warm-paper)] px-4 py-10">
+      <section className="w-full max-w-xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--amber)]">
           Account setup
         </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">
-          Set up your TARKUS account
+        <h1 className="mt-3 font-serif text-3xl font-semibold tracking-tight text-[var(--charcoal)]">
+          Choose how you will use TARKUS
         </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          Your role controls what the backend allows. Students can join classes;
-          teachers can create and manage live sessions.
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+          This is part of sign up. Your choice is saved on the backend and
+          controls which class tools your account can access.
         </p>
 
         <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
@@ -192,7 +227,7 @@ function OnboardingPanel({
           </fieldset>
 
           {error ? (
-            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
             </p>
           ) : null}
@@ -202,7 +237,7 @@ function OnboardingPanel({
             disabled={isSaving || !displayName.trim()}
             type="submit"
           >
-            Save account
+            {isSaving ? 'Saving...' : 'Continue'}
           </button>
         </form>
       </section>
@@ -225,10 +260,10 @@ function RoleOption({
 }) {
   return (
     <label
-      className={`flex cursor-pointer gap-3 rounded-2xl border p-4 transition ${
+      className={`flex cursor-pointer gap-3 border p-4 transition ${
         checked
-          ? 'border-teal-500 bg-teal-50 text-slate-950'
-          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+          ? 'border-[var(--amber)] bg-[#f8efd8] text-[var(--charcoal)]'
+          : 'border-[var(--line)] bg-[var(--surface-strong)] text-[var(--charcoal-soft)] hover:border-[var(--line-strong)]'
       }`}
     >
       <input
@@ -238,10 +273,10 @@ function RoleOption({
         onChange={onChange}
         type="radio"
       />
-      <span className="mt-0.5 text-teal-700">{icon}</span>
+      <span className="mt-0.5 text-[var(--amber)]">{icon}</span>
       <span>
         <span className="block text-sm font-semibold">{label}</span>
-        <span className="mt-1 block text-xs leading-5 text-slate-500">
+        <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">
           {description}
         </span>
       </span>
@@ -253,17 +288,17 @@ function RoleMismatch({
   actualRole,
   requiredRole,
 }: {
-  actualRole: 'student' | 'teacher'
-  requiredRole: 'student' | 'teacher'
+  actualRole: AccountRole
+  requiredRole: AccountRole
 }) {
-  const destination = actualRole === 'teacher' ? '/teacher' : '/join'
+  const destination = defaultPathForRole(actualRole)
   return (
-    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-slate-50 px-4 py-10">
-      <section className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-6 shadow-xl shadow-slate-200/70">
-        <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--warm-paper)] px-4 py-10">
+      <section className="w-full max-w-md border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
+        <h1 className="font-serif text-xl font-semibold tracking-tight text-[var(--charcoal)]">
           This page is for {requiredRole}s
         </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
           Your account is set up as a {actualRole}. TARKUS enforces this in
           Convex, so changing the URL will not bypass it.
         </p>
@@ -275,19 +310,37 @@ function RoleMismatch({
   )
 }
 
-function AuthPanel({ title }: { title: string }) {
+function AuthPanel({
+  requiredRole,
+  title,
+}: {
+  requiredRole?: AccountRole
+  title: string
+}) {
   const redirectUrl =
     typeof window === 'undefined'
       ? undefined
       : `${window.location.pathname}${window.location.search}`
 
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const returnTo = `${window.location.pathname}${window.location.search}`
+    if (returnTo !== '/') {
+      window.localStorage.setItem(ONBOARDING_RETURN_TO_KEY, returnTo)
+    }
+    if (requiredRole) {
+      window.localStorage.setItem(ONBOARDING_ROLE_KEY, requiredRole)
+    }
+  }, [requiredRole])
+
   return (
-    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-slate-50 px-4 py-10">
-      <section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70">
-        <h1 className="text-xl font-semibold tracking-tight text-slate-950">
+    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--warm-paper)] px-4 py-10">
+      <section className="w-full max-w-md border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
+        <h1 className="font-serif text-xl font-semibold tracking-tight text-[var(--charcoal)]">
           {title}
         </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
           Use any test email while verification is disabled for the hackathon
           build.
         </p>
@@ -303,4 +356,49 @@ function AuthPanel({ title }: { title: string }) {
       </section>
     </main>
   )
+}
+
+function LoadingState({ label }: { label: string }) {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center text-sm text-[var(--muted)]">
+      {label}
+    </div>
+  )
+}
+
+function ConvexDiagnostic() {
+  return (
+    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--warm-paper)] px-4 py-10">
+      <section className="w-full max-w-md border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
+        <h1 className="font-serif text-xl font-semibold tracking-tight text-[var(--charcoal)]">
+          Convex session is still connecting
+        </h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+          You are signed in with Clerk, but the backend token has not completed.
+          Try a hard refresh. If this persists, sign out and sign in again.
+        </p>
+      </section>
+    </main>
+  )
+}
+
+function getStoredOnboardingReturnTo() {
+  if (typeof window === 'undefined') return null
+  return window.localStorage.getItem(ONBOARDING_RETURN_TO_KEY)
+}
+
+function getStoredOnboardingRole(): AccountRole | null {
+  if (typeof window === 'undefined') return null
+
+  const role = window.localStorage.getItem(ONBOARDING_ROLE_KEY)
+  if (role === 'student' || role === 'teacher') {
+    return role
+  }
+  return null
+}
+
+function clearStoredOnboardingIntent() {
+  if (typeof window === 'undefined') return
+  window.localStorage.removeItem(ONBOARDING_RETURN_TO_KEY)
+  window.localStorage.removeItem(ONBOARDING_ROLE_KEY)
 }

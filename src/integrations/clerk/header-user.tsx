@@ -12,7 +12,11 @@ export default function HeaderUser() {
         <UserButton />
       </SignedIn>
       <SignedOut>
-        <SignInButton />
+        <SignInButton>
+          <button className="header-sign-in" type="button">
+            Sign in
+          </button>
+        </SignInButton>
       </SignedOut>
     </>
   )

@@ -1,4 +1,5 @@
 import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
+import { AccountOnboardingGate } from '../components/AuthGate'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
 
@@ -45,7 +46,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <ClerkProvider>
           <ConvexProvider>
             <Header />
-            {children}
+            <AccountOnboardingGate>{children}</AccountOnboardingGate>
             <Footer />
           </ConvexProvider>
         </ClerkProvider>
