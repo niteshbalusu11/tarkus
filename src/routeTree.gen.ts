@@ -9,8 +9,11 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TeacherRouteImport } from './routes/teacher'
+import { Route as JoinRouteImport } from './routes/join'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as StudentSessionIdRouteImport } from './routes/student/$sessionId'
 import { Route as DemoStoreRouteImport } from './routes/demo/store'
 import { Route as DemoConvexRouteImport } from './routes/demo/convex'
 import { Route as DemoClerkRouteImport } from './routes/demo/clerk'
@@ -25,6 +28,16 @@ import { Route as DemoApiAiStructuredRouteImport } from './routes/demo/api.ai.st
 import { Route as DemoApiAiImageRouteImport } from './routes/demo/api.ai.image'
 import { Route as DemoApiAiChatRouteImport } from './routes/demo/api.ai.chat'
 
+const TeacherRoute = TeacherRouteImport.update({
+  id: '/teacher',
+  path: '/teacher',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JoinRoute = JoinRouteImport.update({
+  id: '/join',
+  path: '/join',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
@@ -33,6 +46,11 @@ const AboutRoute = AboutRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StudentSessionIdRoute = StudentSessionIdRouteImport.update({
+  id: '/student/$sessionId',
+  path: '/student/$sessionId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DemoStoreRoute = DemoStoreRouteImport.update({
@@ -104,12 +122,15 @@ const DemoApiAiChatRoute = DemoApiAiChatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/join': typeof JoinRoute
+  '/teacher': typeof TeacherRoute
   '/demo/ai-chat': typeof DemoAiChatRoute
   '/demo/ai-image': typeof DemoAiImageRoute
   '/demo/ai-structured': typeof DemoAiStructuredRoute
   '/demo/clerk': typeof DemoClerkRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/store': typeof DemoStoreRoute
+  '/student/$sessionId': typeof StudentSessionIdRoute
   '/demo/guitars/$guitarId': typeof DemoGuitarsGuitarIdRoute
   '/demo/guitars/': typeof DemoGuitarsIndexRoute
   '/demo/api/ai/chat': typeof DemoApiAiChatRoute
@@ -121,12 +142,15 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/join': typeof JoinRoute
+  '/teacher': typeof TeacherRoute
   '/demo/ai-chat': typeof DemoAiChatRoute
   '/demo/ai-image': typeof DemoAiImageRoute
   '/demo/ai-structured': typeof DemoAiStructuredRoute
   '/demo/clerk': typeof DemoClerkRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/store': typeof DemoStoreRoute
+  '/student/$sessionId': typeof StudentSessionIdRoute
   '/demo/guitars/$guitarId': typeof DemoGuitarsGuitarIdRoute
   '/demo/guitars': typeof DemoGuitarsIndexRoute
   '/demo/api/ai/chat': typeof DemoApiAiChatRoute
@@ -139,12 +163,15 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/join': typeof JoinRoute
+  '/teacher': typeof TeacherRoute
   '/demo/ai-chat': typeof DemoAiChatRoute
   '/demo/ai-image': typeof DemoAiImageRoute
   '/demo/ai-structured': typeof DemoAiStructuredRoute
   '/demo/clerk': typeof DemoClerkRoute
   '/demo/convex': typeof DemoConvexRoute
   '/demo/store': typeof DemoStoreRoute
+  '/student/$sessionId': typeof StudentSessionIdRoute
   '/demo/guitars/$guitarId': typeof DemoGuitarsGuitarIdRoute
   '/demo/guitars/': typeof DemoGuitarsIndexRoute
   '/demo/api/ai/chat': typeof DemoApiAiChatRoute
@@ -158,12 +185,15 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/about'
+    | '/join'
+    | '/teacher'
     | '/demo/ai-chat'
     | '/demo/ai-image'
     | '/demo/ai-structured'
     | '/demo/clerk'
     | '/demo/convex'
     | '/demo/store'
+    | '/student/$sessionId'
     | '/demo/guitars/$guitarId'
     | '/demo/guitars/'
     | '/demo/api/ai/chat'
@@ -175,12 +205,15 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/about'
+    | '/join'
+    | '/teacher'
     | '/demo/ai-chat'
     | '/demo/ai-image'
     | '/demo/ai-structured'
     | '/demo/clerk'
     | '/demo/convex'
     | '/demo/store'
+    | '/student/$sessionId'
     | '/demo/guitars/$guitarId'
     | '/demo/guitars'
     | '/demo/api/ai/chat'
@@ -192,12 +225,15 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/about'
+    | '/join'
+    | '/teacher'
     | '/demo/ai-chat'
     | '/demo/ai-image'
     | '/demo/ai-structured'
     | '/demo/clerk'
     | '/demo/convex'
     | '/demo/store'
+    | '/student/$sessionId'
     | '/demo/guitars/$guitarId'
     | '/demo/guitars/'
     | '/demo/api/ai/chat'
@@ -210,12 +246,15 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  JoinRoute: typeof JoinRoute
+  TeacherRoute: typeof TeacherRoute
   DemoAiChatRoute: typeof DemoAiChatRoute
   DemoAiImageRoute: typeof DemoAiImageRoute
   DemoAiStructuredRoute: typeof DemoAiStructuredRoute
   DemoClerkRoute: typeof DemoClerkRoute
   DemoConvexRoute: typeof DemoConvexRoute
   DemoStoreRoute: typeof DemoStoreRoute
+  StudentSessionIdRoute: typeof StudentSessionIdRoute
   DemoGuitarsGuitarIdRoute: typeof DemoGuitarsGuitarIdRoute
   DemoGuitarsIndexRoute: typeof DemoGuitarsIndexRoute
   DemoApiAiChatRoute: typeof DemoApiAiChatRoute
@@ -227,6 +266,20 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/teacher': {
+      id: '/teacher'
+      path: '/teacher'
+      fullPath: '/teacher'
+      preLoaderRoute: typeof TeacherRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/join': {
+      id: '/join'
+      path: '/join'
+      fullPath: '/join'
+      preLoaderRoute: typeof JoinRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/about': {
       id: '/about'
       path: '/about'
@@ -239,6 +292,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/student/$sessionId': {
+      id: '/student/$sessionId'
+      path: '/student/$sessionId'
+      fullPath: '/student/$sessionId'
+      preLoaderRoute: typeof StudentSessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/demo/store': {
@@ -338,12 +398,15 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  JoinRoute: JoinRoute,
+  TeacherRoute: TeacherRoute,
   DemoAiChatRoute: DemoAiChatRoute,
   DemoAiImageRoute: DemoAiImageRoute,
   DemoAiStructuredRoute: DemoAiStructuredRoute,
   DemoClerkRoute: DemoClerkRoute,
   DemoConvexRoute: DemoConvexRoute,
   DemoStoreRoute: DemoStoreRoute,
+  StudentSessionIdRoute: StudentSessionIdRoute,
   DemoGuitarsGuitarIdRoute: DemoGuitarsGuitarIdRoute,
   DemoGuitarsIndexRoute: DemoGuitarsIndexRoute,
   DemoApiAiChatRoute: DemoApiAiChatRoute,

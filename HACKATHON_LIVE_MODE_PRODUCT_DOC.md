@@ -1,8 +1,8 @@
-# Linchpin Live Mode Product Document
+# TARKUS Live Mode Product Document
 
 ## Context
 
-Linchpin is the hackathon build of the broader TARKUS vision: an AI-assisted training platform for strategic nonviolence trainers. For this hackathon, the product is focused on one thing: helping an in-person trainer understand what is happening across a live class without putting AI in front of students.
+TARKUS is an AI-assisted training platform for strategic nonviolence trainers. For this hackathon, the product is focused on one thing: helping an in-person trainer understand what is happening across a live class without putting AI in front of students.
 
 The product is not trying to replace the trainer. The trainer remains the human teacher in the room. Students interact with class tools, chat, and structured assessments. AI reads that activity in the background and gives the trainer a concise, useful view of the class.
 
@@ -447,4 +447,3 @@ Indexes:
 7. AI analysis action and stored summaries.
 8. Demo simulation.
 9. Visual polish and pitch-flow cleanup.
-

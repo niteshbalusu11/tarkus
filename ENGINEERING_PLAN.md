@@ -1,4 +1,4 @@
-# Linchpin Hackathon Engineering Plan
+# TARKUS Hackathon Engineering Plan
 
 ## Objective
 
@@ -53,8 +53,8 @@ Create a minimal product shell with three core entry points:
 
 Todos:
 
-- [ ] Update app metadata/title to Linchpin.
-- [ ] Replace starter home page with a simple Linchpin entry page.
+- [ ] Update app metadata/title to TARKUS.
+- [ ] Replace starter home page with a simple TARKUS entry page.
 - [ ] Add auth-gated teacher route.
 - [ ] Add auth-gated student join route.
 - [ ] Add route for joined student session, likely `/session/$sessionCode` or `/student/$sessionId`.
@@ -261,7 +261,7 @@ Make the app look credible for judges.
 
 Todos:
 
-- [ ] Replace starter branding with Linchpin.
+- [ ] Replace starter branding with TARKUS.
 - [ ] Use a restrained operational dashboard style.
 - [ ] Ensure teacher dashboard fits key panels above the fold on laptop.
 - [ ] Ensure student UI works on mobile.
@@ -336,4 +336,3 @@ Do these first, in order:
 - Teacher-only AI synthesis.
 - Pillars visual results.
 - Demo seed fallback.
-
