@@ -5,6 +5,7 @@ import {
   Bot,
   CheckCircle2,
   Download,
+  FileDown,
   FileCheck2,
   FileImage,
   FileText,
@@ -14,6 +15,7 @@ import {
   PenLine,
   Presentation,
   Sparkles,
+  Trash2,
   Upload,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -109,6 +111,7 @@ function PrepWorkspace() {
   const generateCurriculum = useAction(api.prepNode.generateCurriculum)
   const refineCurriculum = useAction(api.prepNode.refineCurriculum)
   const generatePresentation = useAction(api.prepNode.generatePresentation)
+  const deletePresentation = useMutation(api.prep.deletePresentation)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const ensuredWorkspaceRef = useRef(false)
   const [draft, setDraft] = useState<CurriculumContent>(emptyCurriculum)
@@ -308,7 +311,7 @@ function PrepWorkspace() {
       ) : null}
 
       <section className="grid items-start gap-5 xl:grid-cols-[300px_minmax(0,1fr)_330px]">
-        <aside className="sticky top-24 h-fit rounded-3xl border border-[var(--line)] bg-[rgba(255,253,248,0.74)] p-4">
+        <aside className="rounded-3xl border border-[var(--line)] bg-[rgba(255,253,248,0.74)] p-4 xl:sticky xl:top-5 xl:max-h-[calc(100vh-2.5rem)] xl:overflow-y-auto">
           <section className="space-y-3 border-b border-[var(--line)] pb-5">
             <h2 className="flex items-center gap-2 text-sm font-bold text-[var(--charcoal)]">
               <Sparkles className="h-4 w-4 text-[var(--amber-deep)]" />
@@ -390,6 +393,11 @@ function PrepWorkspace() {
             busy={busy}
             latestCurriculum={latestCurriculum}
             presentations={presentations || []}
+            onDelete={(presentationId) =>
+              runAction(`delete-presentation-${presentationId}`, () =>
+                deletePresentation({ presentationId }),
+              )
+            }
             onGenerate={() =>
               runAction('presentation', () =>
                 generatePresentation({ workspaceId: typedWorkspaceId }),
@@ -402,6 +410,7 @@ function PrepWorkspace() {
           busy={busy}
           curriculum={latestCurriculum}
           draft={draft}
+          exportHref={`/teacher/session/${typedSessionId}/curriculum-export?print=1`}
           setDraft={setDraft}
           onSave={saveDraft}
           onFinalize={() =>
@@ -573,6 +582,7 @@ function CurriculumWorkspace({
   busy,
   curriculum,
   draft,
+  exportHref,
   setDraft,
   onSave,
   onFinalize,
@@ -580,6 +590,7 @@ function CurriculumWorkspace({
   busy: string | null
   curriculum: Doc<'curricula'> | null | undefined
   draft: CurriculumContent
+  exportHref: string
   setDraft: Dispatch<SetStateAction<CurriculumContent>>
   onSave: () => Promise<void>
   onFinalize: () => Promise<void>
@@ -627,6 +638,12 @@ function CurriculumWorkspace({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <a href={exportHref} rel="noreferrer" target="_blank">
+                <FileDown className="h-4 w-4" />
+                Export PDF
+              </a>
+            </Button>
             <Button
               variant="outline"
               disabled={busy === 'save'}
@@ -1013,11 +1030,13 @@ function PresentationPanel({
   busy,
   latestCurriculum,
   presentations,
+  onDelete,
   onGenerate,
 }: {
   busy: string | null
   latestCurriculum: Doc<'curricula'> | null | undefined
   presentations: Array<Doc<'presentations'>>
+  onDelete: (presentationId: Id<'presentations'>) => Promise<unknown>
   onGenerate: () => Promise<unknown>
 }) {
   return (
@@ -1043,7 +1062,9 @@ function PresentationPanel({
         <div className="space-y-2">
           {presentations.map((presentation) => (
             <PresentationDownload
+              busy={busy}
               key={presentation._id}
+              onDelete={onDelete}
               presentation={presentation}
             />
           ))}
@@ -1058,8 +1079,12 @@ function PresentationPanel({
 }
 
 function PresentationDownload({
+  busy,
+  onDelete,
   presentation,
 }: {
+  busy: string | null
+  onDelete: (presentationId: Id<'presentations'>) => Promise<unknown>
   presentation: Doc<'presentations'>
 }) {
   const downloadUrl = useQuery(
@@ -1068,19 +1093,53 @@ function PresentationDownload({
       ? { presentationId: presentation._id }
       : 'skip',
   )
+  const isDeleting = busy === `delete-presentation-${presentation._id}`
+  const isDeleteDisabled =
+    isDeleting ||
+    presentation.status === 'generating' ||
+    presentation.editStatus === 'editing'
   return (
     <div className="rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3">
-      <div className="flex items-start gap-3">
-        <FileCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--amber-deep)]" />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold text-[var(--charcoal)]">
-            {presentation.fileName}
-          </p>
-          <p className="mt-1 text-xs capitalize text-[var(--charcoal-muted)]">
-            {presentation.status}
-            {presentation.error ? `: ${presentation.error}` : ''}
-          </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <FileCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--amber-deep)]" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold text-[var(--charcoal)]">
+              {presentation.fileName}
+            </p>
+            <p className="mt-1 text-xs capitalize text-[var(--charcoal-muted)]">
+              {presentation.status}
+              {presentation.error ? `: ${presentation.error}` : ''}
+            </p>
+          </div>
         </div>
+        <Button
+          aria-label={`Delete ${presentation.fileName}`}
+          disabled={isDeleteDisabled}
+          onClick={() => {
+            if (
+              window.confirm(
+                `Delete ${presentation.fileName}? This cannot be undone.`,
+              )
+            ) {
+              void onDelete(presentation._id)
+            }
+          }}
+          size="icon-sm"
+          title={
+            presentation.status === 'generating' ||
+            presentation.editStatus === 'editing'
+              ? 'Wait for this presentation to finish updating before deleting it.'
+              : 'Delete presentation'
+          }
+          variant="destructive"
+        >
+          {isDeleting ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="h-4 w-4" />
+          )}
+        </Button>
       </div>
       {presentation.status === 'ready' ? (
         <div

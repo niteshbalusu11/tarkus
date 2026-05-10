@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TeacherPrepRouteImport } from './routes/teacher.prep'
 import { Route as StudentSessionIdRouteImport } from './routes/student/$sessionId'
 import { Route as TeacherSessionSessionIdPrepRouteImport } from './routes/teacher.session.$sessionId.prep'
+import { Route as TeacherSessionSessionIdCurriculumExportRouteImport } from './routes/teacher.session.$sessionId.curriculum-export'
 import { Route as TeacherPresentationPresentationIdPreviewRouteImport } from './routes/teacher.presentation.$presentationId.preview'
 
 const TeacherRoute = TeacherRouteImport.update({
@@ -48,6 +49,12 @@ const TeacherSessionSessionIdPrepRoute =
     path: '/session/$sessionId/prep',
     getParentRoute: () => TeacherRoute,
   } as any)
+const TeacherSessionSessionIdCurriculumExportRoute =
+  TeacherSessionSessionIdCurriculumExportRouteImport.update({
+    id: '/session/$sessionId/curriculum-export',
+    path: '/session/$sessionId/curriculum-export',
+    getParentRoute: () => TeacherRoute,
+  } as any)
 const TeacherPresentationPresentationIdPreviewRoute =
   TeacherPresentationPresentationIdPreviewRouteImport.update({
     id: '/presentation/$presentationId/preview',
@@ -62,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/student/$sessionId': typeof StudentSessionIdRoute
   '/teacher/prep': typeof TeacherPrepRoute
   '/teacher/presentation/$presentationId/preview': typeof TeacherPresentationPresentationIdPreviewRoute
+  '/teacher/session/$sessionId/curriculum-export': typeof TeacherSessionSessionIdCurriculumExportRoute
   '/teacher/session/$sessionId/prep': typeof TeacherSessionSessionIdPrepRoute
 }
 export interface FileRoutesByTo {
@@ -71,6 +79,7 @@ export interface FileRoutesByTo {
   '/student/$sessionId': typeof StudentSessionIdRoute
   '/teacher/prep': typeof TeacherPrepRoute
   '/teacher/presentation/$presentationId/preview': typeof TeacherPresentationPresentationIdPreviewRoute
+  '/teacher/session/$sessionId/curriculum-export': typeof TeacherSessionSessionIdCurriculumExportRoute
   '/teacher/session/$sessionId/prep': typeof TeacherSessionSessionIdPrepRoute
 }
 export interface FileRoutesById {
@@ -81,6 +90,7 @@ export interface FileRoutesById {
   '/student/$sessionId': typeof StudentSessionIdRoute
   '/teacher/prep': typeof TeacherPrepRoute
   '/teacher/presentation/$presentationId/preview': typeof TeacherPresentationPresentationIdPreviewRoute
+  '/teacher/session/$sessionId/curriculum-export': typeof TeacherSessionSessionIdCurriculumExportRoute
   '/teacher/session/$sessionId/prep': typeof TeacherSessionSessionIdPrepRoute
 }
 export interface FileRouteTypes {
@@ -92,6 +102,7 @@ export interface FileRouteTypes {
     | '/student/$sessionId'
     | '/teacher/prep'
     | '/teacher/presentation/$presentationId/preview'
+    | '/teacher/session/$sessionId/curriculum-export'
     | '/teacher/session/$sessionId/prep'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -101,6 +112,7 @@ export interface FileRouteTypes {
     | '/student/$sessionId'
     | '/teacher/prep'
     | '/teacher/presentation/$presentationId/preview'
+    | '/teacher/session/$sessionId/curriculum-export'
     | '/teacher/session/$sessionId/prep'
   id:
     | '__root__'
@@ -110,6 +122,7 @@ export interface FileRouteTypes {
     | '/student/$sessionId'
     | '/teacher/prep'
     | '/teacher/presentation/$presentationId/preview'
+    | '/teacher/session/$sessionId/curriculum-export'
     | '/teacher/session/$sessionId/prep'
   fileRoutesById: FileRoutesById
 }
@@ -164,6 +177,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TeacherSessionSessionIdPrepRouteImport
       parentRoute: typeof TeacherRoute
     }
+    '/teacher/session/$sessionId/curriculum-export': {
+      id: '/teacher/session/$sessionId/curriculum-export'
+      path: '/session/$sessionId/curriculum-export'
+      fullPath: '/teacher/session/$sessionId/curriculum-export'
+      preLoaderRoute: typeof TeacherSessionSessionIdCurriculumExportRouteImport
+      parentRoute: typeof TeacherRoute
+    }
     '/teacher/presentation/$presentationId/preview': {
       id: '/teacher/presentation/$presentationId/preview'
       path: '/presentation/$presentationId/preview'
@@ -177,6 +197,7 @@ declare module '@tanstack/react-router' {
 interface TeacherRouteChildren {
   TeacherPrepRoute: typeof TeacherPrepRoute
   TeacherPresentationPresentationIdPreviewRoute: typeof TeacherPresentationPresentationIdPreviewRoute
+  TeacherSessionSessionIdCurriculumExportRoute: typeof TeacherSessionSessionIdCurriculumExportRoute
   TeacherSessionSessionIdPrepRoute: typeof TeacherSessionSessionIdPrepRoute
 }
 
@@ -184,6 +205,8 @@ const TeacherRouteChildren: TeacherRouteChildren = {
   TeacherPrepRoute: TeacherPrepRoute,
   TeacherPresentationPresentationIdPreviewRoute:
     TeacherPresentationPresentationIdPreviewRoute,
+  TeacherSessionSessionIdCurriculumExportRoute:
+    TeacherSessionSessionIdCurriculumExportRoute,
   TeacherSessionSessionIdPrepRoute: TeacherSessionSessionIdPrepRoute,
 }
 

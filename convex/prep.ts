@@ -393,6 +393,48 @@ export const getPresentationDownloadUrl = query({
   },
 })
 
+export const deletePresentation = mutation({
+  args: { presentationId: v.id('presentations') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherProfile(ctx, identity)
+    const presentation = await ctx.db.get(args.presentationId)
+    if (!presentation) {
+      throw new Error('Presentation not found')
+    }
+    await assertTeacherOwnsWorkspace(
+      ctx,
+      presentation.workspaceId,
+      identity.tokenIdentifier,
+    )
+    if (presentation.status === 'generating') {
+      throw new Error('Presentation is still generating')
+    }
+    if (presentation.editStatus === 'editing') {
+      throw new Error('Presentation is still updating')
+    }
+
+    for (;;) {
+      const messages = await ctx.db
+        .query('presentationMessages')
+        .withIndex('by_presentationId_and_createdAt', (q) =>
+          q.eq('presentationId', args.presentationId),
+        )
+        .take(100)
+      if (!messages.length) break
+      for (const message of messages) {
+        await ctx.db.delete(message._id)
+      }
+    }
+
+    await ctx.db.delete(args.presentationId)
+    if (presentation.storageId) {
+      await ctx.storage.delete(presentation.storageId)
+    }
+    return { deleted: true }
+  },
+})
+
 export const listPresentationMessages = query({
   args: { presentationId: v.id('presentations') },
   handler: async (ctx, args) => {

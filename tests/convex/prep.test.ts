@@ -323,6 +323,84 @@ describe('prep workspace auth', () => {
     })
   })
 
+  it('lets the owning teacher delete a generated presentation', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const otherTeacher = t.withIdentity(otherTeacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    await onboard(t, otherTeacherIdentity, 'teacher', 'Other Trainer')
+    await onboard(t, studentIdentity, 'student', 'Student')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {})
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+    const presentationId = await createStoredPresentation(t, workspaceId)
+    await t.run(async (ctx) =>
+      ctx.db.insert('presentationMessages', {
+        presentationId,
+        workspaceId,
+        teacherTokenIdentifier: teacherIdentity.tokenIdentifier,
+        role: 'assistant',
+        body: 'Ready to revise the deck.',
+        createdAt: Date.now(),
+      }),
+    )
+
+    await expect(
+      t.mutation(api.prep.deletePresentation, { presentationId }),
+    ).rejects.toThrow('Not authenticated')
+    await expect(
+      student.mutation(api.prep.deletePresentation, { presentationId }),
+    ).rejects.toThrow('Only teachers can use this')
+    await expect(
+      otherTeacher.mutation(api.prep.deletePresentation, { presentationId }),
+    ).rejects.toThrow('Unauthorized')
+
+    await teacher.mutation(api.prep.deletePresentation, { presentationId })
+
+    const presentations = await teacher.query(api.prep.listPresentations, {
+      workspaceId,
+    })
+    expect(presentations).toHaveLength(0)
+    await expect(
+      teacher.query(api.prep.getPresentationPreview, { presentationId }),
+    ).rejects.toThrow('Presentation not found')
+    await expect(
+      teacher.query(api.prep.listPresentationMessages, { presentationId }),
+    ).rejects.toThrow('Presentation not found')
+  })
+
+  it('does not delete presentations while generation or edits are running', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {})
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+    const generatingPresentationId = await createStoredPresentation(
+      t,
+      workspaceId,
+      'generating',
+    )
+    const editingPresentationId = await createStoredPresentation(t, workspaceId)
+    await t.run(async (ctx) =>
+      ctx.db.patch(editingPresentationId, { editStatus: 'editing' }),
+    )
+
+    await expect(
+      teacher.mutation(api.prep.deletePresentation, {
+        presentationId: generatingPresentationId,
+      }),
+    ).rejects.toThrow('still generating')
+    await expect(
+      teacher.mutation(api.prep.deletePresentation, {
+        presentationId: editingPresentationId,
+      }),
+    ).rejects.toThrow('still updating')
+  })
+
   it('locks presentation edits to one running edit at a time', async () => {
     const t = newTestBackend()
     const teacher = t.withIdentity(teacherIdentity)
