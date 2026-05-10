@@ -6,6 +6,7 @@ import {
   CircleDot,
   Clock,
   Copy,
+  Flag,
   LayoutDashboard,
   MessageSquareText,
   Play,
@@ -16,13 +17,19 @@ import {
 } from 'lucide-react'
 
 import AuthGate from '../components/AuthGate'
+import { Alert, AlertDescription } from '../components/ui/alert'
+import { Badge } from '../components/ui/badge'
+import { Button } from '../components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import {
-  getMatrixPoints,
+  getAccessibilityPoints,
+  getClassRubricSummary,
   getPillarFrequency,
   getSequenceSummary,
   normalizeAnalysisOutput,
+  normalizePillarsPayload,
   pillarColors,
 } from '../lib/tarkus'
 import type {
@@ -123,27 +130,27 @@ function TeacherDashboard() {
 
   if (!activeSessionId || !session) {
     return (
-      <main className="min-h-[calc(100vh-8rem)] bg-slate-50 px-4 py-10">
-        <section className="mx-auto flex min-h-[68vh] max-w-4xl flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white px-6 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-950 text-white">
+      <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-4 py-10">
+        <Card className="mx-auto flex min-h-[68vh] max-w-4xl flex-col items-center justify-center border-dashed px-6 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <LayoutDashboard className="h-6 w-6" />
           </div>
-          <h1 className="mt-6 text-3xl font-semibold tracking-tight text-slate-950">
+          <h1 className="mt-6 font-serif text-3xl font-semibold tracking-tight text-foreground">
             Start a live class
           </h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-slate-600">
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
             Create one session code for the room. Students authenticate, join
             with the code, chat, and submit the Pillars exercise.
           </p>
-          <button
-            className="primary-action mt-7"
+          <Button
+            className="mt-7"
             disabled={busyAction === 'create'}
             onClick={handleCreateSession}
           >
             <Play className="h-4 w-4" />
             New live session
-          </button>
-        </section>
+          </Button>
+        </Card>
       </main>
     )
   }
@@ -153,7 +160,7 @@ function TeacherDashboard() {
   )
 
   return (
-    <main className="min-h-[calc(100vh-8rem)] bg-slate-50 px-4 py-6">
+    <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-4 py-6">
       <section className="mx-auto grid w-full max-w-7xl gap-4 xl:grid-cols-[1fr_360px]">
         <div className="space-y-4">
           <SessionHeader
@@ -167,7 +174,12 @@ function TeacherDashboard() {
             onDelete={handleDelete}
           />
           <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <AiPanel analysis={analysis} error={latestAnalysis?.error} />
+            <AiPanel
+              analysis={analysis}
+              error={latestAnalysis?.error}
+              analyzedSubmissionCount={latestAnalysis?.inputCursor.submissionCount}
+              currentSubmissionCount={submissions?.length || 0}
+            />
             <PillarsPanel submissions={submissions || []} />
           </div>
         </div>
@@ -183,7 +195,7 @@ function TeacherDashboard() {
 
 function LoadingSurface() {
   return (
-    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-slate-50 text-sm text-slate-500">
+    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--background)] text-sm text-muted-foreground">
       Loading teacher dashboard...
     </main>
   )
@@ -214,63 +226,67 @@ function SessionHeader({
   })
 
   return (
-    <header className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="status-chip bg-emerald-50 text-emerald-700">
-              <CircleDot className="h-3.5 w-3.5" />
-              Live session
-            </span>
-            <span className="status-chip bg-slate-100 text-slate-600">
-              <Clock className="h-3.5 w-3.5" />
-              Expires {expires}
-            </span>
-          </div>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Join code
-              </p>
-              <p className="font-mono text-4xl font-semibold tracking-[0.18em] text-slate-950">
-                {code}
-              </p>
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge className="gap-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+                <CircleDot className="h-3.5 w-3.5" />
+                Live session
+              </Badge>
+              <Badge variant="secondary" className="gap-1.5">
+                <Clock className="h-3.5 w-3.5" />
+                Expires {expires}
+              </Badge>
             </div>
-            <button
-              className="icon-button mb-1"
-              title="Copy join code"
-              onClick={() => navigator.clipboard.writeText(code)}
+            <div className="mt-3 flex flex-wrap items-end gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  Join code
+                </p>
+                <p className="font-mono text-4xl font-semibold tracking-[0.18em] text-foreground">
+                  {code}
+                </p>
+              </div>
+              <Button
+                className="mb-1"
+                size="icon"
+                variant="outline"
+                title="Copy join code"
+                onClick={() => navigator.clipboard.writeText(code)}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Stat icon={<Users />} label="joined" value={participantCount} />
+            <Stat
+              icon={<Sparkles />}
+              label="submitted"
+              value={submissionCount}
+            />
+            <Button
+              variant="outline"
+              disabled={busyAction === 'seed'}
+              onClick={onSeed}
             >
-              <Copy className="h-4 w-4" />
-            </button>
+              <Sparkles className="h-4 w-4" />
+              Seed demo
+            </Button>
+            <Button disabled={busyAction === 'analyze'} onClick={onAnalyze}>
+              <RefreshCw className="h-4 w-4" />
+              Refresh AI
+            </Button>
+            <Button variant="destructive" size="icon" onClick={onDelete}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Stat icon={<Users />} label="joined" value={participantCount} />
-          <Stat icon={<Sparkles />} label="submitted" value={submissionCount} />
-          <button
-            className="secondary-action"
-            disabled={busyAction === 'seed'}
-            onClick={onSeed}
-          >
-            <Sparkles className="h-4 w-4" />
-            Seed demo
-          </button>
-          <button
-            className="primary-action"
-            disabled={busyAction === 'analyze'}
-            onClick={onAnalyze}
-          >
-            <RefreshCw className="h-4 w-4" />
-            Refresh AI
-          </button>
-          <button className="danger-action" onClick={onDelete}>
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-    </header>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -284,9 +300,9 @@ function Stat({
   value: number
 }) {
   return (
-    <div className="flex min-w-24 items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-slate-700">
+    <div className="flex min-w-24 items-center gap-2 rounded-lg bg-muted px-3 py-2 text-muted-foreground">
       <span className="[&_svg]:h-4 [&_svg]:w-4">{icon}</span>
-      <span className="text-lg font-semibold text-slate-950">{value}</span>
+      <span className="text-lg font-semibold text-foreground">{value}</span>
       <span className="text-xs">{label}</span>
     </div>
   )
@@ -295,85 +311,169 @@ function Stat({
 function AiPanel({
   analysis,
   error,
+  analyzedSubmissionCount,
+  currentSubmissionCount,
 }: {
   analysis?: NormalizedAnalysisOutput
   error?: string
+  analyzedSubmissionCount?: number
+  currentSubmissionCount: number
 }) {
+  const isStale =
+    analysis &&
+    analyzedSubmissionCount !== undefined &&
+    currentSubmissionCount > analyzedSubmissionCount
+
   return (
-    <section className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
-      <div className="mb-5 flex items-center justify-between gap-3">
+    <Card className="border-slate-800 bg-slate-950 text-white">
+      <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-200">
             Teacher-only AI
           </p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight">
+          <CardTitle className="mt-1 font-serif text-2xl">
             Class synthesis
-          </h2>
+          </CardTitle>
         </div>
         <Bot className="h-6 w-6 text-teal-200" />
-      </div>
+      </CardHeader>
+      <CardContent>
+        {error ? (
+          <Alert className="mb-4 border-amber-300/20 bg-amber-300/10 text-amber-100">
+            <AlertDescription>
+              Using local fallback analysis: {error}
+            </AlertDescription>
+          </Alert>
+        ) : null}
+        {isStale ? (
+          <Alert className="mb-4 border-amber-300/20 bg-amber-300/10 text-amber-100">
+            <AlertDescription>
+              AI was last refreshed at {analyzedSubmissionCount} submissions.
+              Refresh AI to include the newest maps.
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
-      {error ? (
-        <p className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-xs text-amber-100">
-          Using local fallback analysis: {error}
-        </p>
-      ) : null}
-
-      {!analysis ? (
-        <p className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-slate-300">
-          Seed demo data or wait for student activity, then refresh AI for a
-          concise class brief.
-        </p>
-      ) : (
-        <div className="space-y-4">
-          <InsightList title="Teacher brief" items={analysis.teacherBrief} />
-          <div className="grid gap-3 md:grid-cols-2">
-            <InsightList
-              title="Recurring questions"
-              items={analysis.recurringQuestions}
-            />
-            <InsightList
-              title="Unclear concepts"
-              items={analysis.unclearConcepts}
-            />
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-              Emotional tone
-            </p>
-            <p className="mt-2 text-lg font-semibold text-white">
-              {analysis.emotionalTone.label || 'No signal yet'}
-            </p>
-            <p className="mt-1 text-sm leading-6 text-slate-300">
-              {analysis.emotionalTone.explanation ||
-                'More class activity is needed.'}
-            </p>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-              Chat clusters
-            </p>
-            <div className="mt-3 space-y-2">
-              {analysis.chatClusters.map((cluster) => (
-                <div
-                  key={cluster.label}
-                  className="flex items-center justify-between gap-3 text-sm"
-                >
-                  <span className="text-slate-200">{cluster.label}</span>
-                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-teal-100">
-                    {cluster.count || 0}
-                  </span>
+        {!analysis ? (
+          <p className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-slate-300">
+            Seed demo data or wait for student activity, then refresh AI for a
+            concise class brief.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {analysis.readiness ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-200">
+                  Readiness
+                </p>
+                <div className="mt-3 flex flex-wrap items-end gap-3">
+                  <p className="font-serif text-4xl font-semibold text-white">
+                    {analysis.readiness.readyCount}/
+                    {analysis.readiness.totalCount}
+                  </p>
+                  <Badge className="mb-1 bg-teal-200 text-slate-950 hover:bg-teal-200">
+                    {analysis.readiness.recommendation.replaceAll('_', ' ')}
+                  </Badge>
                 </div>
-              ))}
+              </div>
+            ) : null}
+            <InsightList title="Teacher brief" items={analysis.teacherBrief} />
+            <div className="grid gap-3 md:grid-cols-2">
+              <InsightList
+                title="Recurring questions"
+                items={analysis.recurringQuestions}
+              />
+              <InsightList
+                title="Unclear concepts"
+                items={analysis.unclearConcepts}
+              />
+            </div>
+            {analysis.commonErrors.length ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Rubric flags
+                </p>
+                <div className="mt-3 space-y-2">
+                  {analysis.commonErrors.slice(0, 4).map((flag) => (
+                    <div
+                      key={flag.code}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span className="text-slate-200">
+                        {flag.code}: {flag.label}
+                      </span>
+                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-teal-100">
+                        {flag.count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            {analysis.collectiveBlindSpot ? (
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Collective blind spot
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-200">
+                  {analysis.collectiveBlindSpot}
+                </p>
+              </div>
+            ) : null}
+            {analysis.trainerDebriefPrompt ? (
+              <div className="rounded-xl border border-amber-200/20 bg-amber-200/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-100">
+                  Debrief prompt
+                </p>
+                <p className="mt-2 text-sm leading-6 text-amber-50">
+                  {analysis.trainerDebriefPrompt}
+                </p>
+              </div>
+            ) : null}
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Emotional tone
+              </p>
+              <p className="mt-2 text-lg font-semibold text-white">
+                {analysis.emotionalTone.label || 'No signal yet'}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-slate-300">
+                {analysis.emotionalTone.explanation ||
+                  'More class activity is needed.'}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Chat clusters
+              </p>
+              <div className="mt-3 space-y-2">
+                {analysis.chatClusters.map((cluster) => (
+                  <div
+                    key={cluster.label}
+                    className="flex items-center justify-between gap-3 text-sm"
+                  >
+                    <span className="text-slate-200">{cluster.label}</span>
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-teal-100">
+                      {cluster.count || 0}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </section>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
-function InsightList({ title, items }: { title: string; items: Array<string> }) {
+function InsightList({
+  title,
+  items,
+}: {
+  title: string
+  items: Array<string>
+}) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
@@ -400,145 +500,280 @@ function PillarsPanel({
 }: {
   submissions: Array<ActivitySubmission>
 }) {
-  const frequency = useMemo(() => getPillarFrequency(submissions), [submissions])
-  const points = useMemo(() => getMatrixPoints(submissions), [submissions])
-  const sequences = useMemo(() => getSequenceSummary(submissions), [submissions])
+  const frequency = useMemo(
+    () => getPillarFrequency(submissions),
+    [submissions],
+  )
+  const points = useMemo(
+    () => getAccessibilityPoints(submissions),
+    [submissions],
+  )
+  const sequences = useMemo(
+    () => getSequenceSummary(submissions),
+    [submissions],
+  )
+  const rubric = useMemo(
+    () => getClassRubricSummary(submissions),
+    [submissions],
+  )
+  const latestResponses = useMemo(
+    () =>
+      submissions.slice(-5).map((submission) => ({
+        id: submission._id,
+        name: submission.displayName || 'Student',
+        payload: normalizePillarsPayload(submission.payload),
+      })),
+    [submissions],
+  )
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="mb-5 flex items-start justify-between gap-4">
+    <Card>
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-700">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber)]">
             Pillars exercise
           </p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">
-            Importance x Accessibility
-          </h2>
+          <CardTitle className="mt-1 font-serif text-2xl">
+            Accessibility and first moves
+          </CardTitle>
         </div>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-          {submissions.length} maps
-        </span>
-      </div>
+        <Badge variant="secondary">{submissions.length} maps</Badge>
+      </CardHeader>
 
-      <Matrix points={points} />
-
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-950">
-            Most named pillars
-          </h3>
-          <div className="mt-3 space-y-2">
-            {frequency.length ? (
-              frequency.slice(0, 6).map((item, index) => (
-                <div key={item.label} className="flex items-center gap-3">
-                  <span
-                    className="h-2.5 w-2.5 rounded-full"
-                    style={{ backgroundColor: pillarColors[index % pillarColors.length] }}
-                  />
-                  <span className="flex-1 text-sm text-slate-700">
-                    {item.label}
-                  </span>
-                  <span className="text-sm font-semibold text-slate-950">
-                    {item.count}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-500">Waiting for submissions.</p>
-            )}
+      <CardContent>
+        <div className="mb-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-[var(--line)] bg-muted/40 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              Ready
+            </p>
+            <p className="mt-2 font-serif text-3xl font-semibold">
+              {rubric.readyCount}/{rubric.totalCount}
+            </p>
+          </div>
+          <div className="rounded-xl border border-[var(--line)] bg-muted/40 p-4 md:col-span-2">
+            <div className="flex items-center gap-2">
+              <Flag className="h-4 w-4 text-[var(--amber-deep)]" />
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Local rubric
+              </p>
+            </div>
+            <p className="mt-2 text-sm font-semibold text-foreground">
+              {rubric.recommendation.replaceAll('_', ' ')}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              {rubric.collectiveBlindSpot}
+            </p>
           </div>
         </div>
-        <div>
-          <h3 className="text-sm font-semibold text-slate-950">
-            Sequence signal
-          </h3>
-          <div className="mt-3 space-y-2">
-            {sequences.length ? (
-              sequences.slice(0, 5).map((item) => (
+
+        <AccessibilitySignal points={points} />
+
+        <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Most named pillars
+            </h3>
+            <div className="mt-3 space-y-2">
+              {frequency.length ? (
+                frequency.slice(0, 6).map((item, index) => (
+                  <div key={item.label} className="flex items-center gap-3">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{
+                        backgroundColor:
+                          pillarColors[index % pillarColors.length],
+                      }}
+                    />
+                    <span className="flex-1 text-sm text-foreground">
+                      {item.label}
+                    </span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {item.count}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Waiting for submissions.
+                </p>
+              )}
+            </div>
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              Sequence signal
+            </h3>
+            <div className="mt-3 space-y-2">
+              {sequences.length ? (
+                sequences.slice(0, 5).map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-foreground"
+                  >
+                    <span className="font-semibold text-foreground">
+                      {item.label}
+                    </span>{' '}
+                    appears in {item.topThree} top-three sequences.
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No sequence data yet.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {rubric.commonErrors.length ? (
+          <div className="mt-5">
+            <h3 className="text-sm font-semibold text-foreground">
+              Common rubric flags
+            </h3>
+            <div className="mt-3 grid gap-2">
+              {rubric.commonErrors.slice(0, 4).map((flag) => (
                 <div
-                  key={item.label}
-                  className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                  key={flag.code}
+                  className="flex items-center justify-between gap-3 rounded-lg bg-muted/60 px-3 py-2"
                 >
-                  <span className="font-semibold text-slate-950">
-                    {item.label}
-                  </span>{' '}
-                  appears in {item.topThree} top-three sequences.
+                  <span className="text-sm text-foreground">
+                    {flag.code}: {flag.label}
+                  </span>
+                  <span className="text-sm font-semibold">{flag.count}</span>
                 </div>
-              ))
-            ) : (
-              <p className="text-sm text-slate-500">No sequence data yet.</p>
-            )}
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
-    </section>
+        ) : null}
+
+        {latestResponses.length ? (
+          <div className="mt-5">
+            <h3 className="text-sm font-semibold text-foreground">
+              Recent structured responses
+            </h3>
+            <div className="mt-3 space-y-3">
+              {latestResponses.map((response) => (
+                <div
+                  key={response.id}
+                  className="rounded-xl border border-[var(--line)] bg-muted/40 p-3"
+                >
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    {response.name}
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">
+                    Power holder:{' '}
+                    <span className="font-semibold">
+                      {response.payload.powerHolder || 'Not answered'}
+                    </span>
+                  </p>
+                  <p className="mt-2 text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                    First moves
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {response.payload.moves.slice(0, 3).map((move) => (
+                      <Badge key={`${response.id}-${move.rank}`} variant="outline">
+                        {move.rank}. {move.pillarName}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   )
 }
 
-function Matrix({
+function AccessibilitySignal({
   points,
 }: {
   points: Array<{
     pillar: string
     student: string
-    importance: number
     accessibility: number
+    rank: number | null
   }>
 }) {
+  const grouped = [1, 2, 3, 4, 5].map((score) => ({
+    score,
+    points: points.filter((point) => point.accessibility === score),
+  }))
+
   return (
-    <div className="relative aspect-square min-h-72 rounded-2xl border border-slate-200 bg-[linear-gradient(to_right,#e2e8f0_1px,transparent_1px),linear-gradient(to_bottom,#e2e8f0_1px,transparent_1px)] bg-[size:20%_20%] p-4">
-      <span className="absolute left-3 top-3 text-xs font-semibold text-slate-500">
-        High importance
-      </span>
-      <span className="absolute bottom-3 right-3 text-xs font-semibold text-slate-500">
-        High accessibility
-      </span>
-      <span className="absolute bottom-3 left-3 text-xs font-semibold text-slate-400">
-        Low / Low
-      </span>
-      <div className="absolute inset-8 border-l-2 border-b-2 border-slate-400" />
-      {points.map((point, index) => {
-        const left = `${((point.accessibility - 1) / 4) * 78 + 11}%`
-        const bottom = `${((point.importance - 1) / 4) * 78 + 11}%`
-        return (
-          <div
-            key={`${point.student}-${point.pillar}-${index}`}
-            title={`${point.student}: ${point.pillar}`}
-            className="absolute h-3.5 w-3.5 -translate-x-1/2 translate-y-1/2 rounded-full ring-2 ring-white"
-            style={{
-              left,
-              bottom,
-              backgroundColor: pillarColors[index % pillarColors.length],
-            }}
-          />
-        )
-      })}
+    <div className="rounded-xl border border-[var(--line)] bg-[#fffdf8] p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">
+          Accessibility spread
+        </h3>
+        <span className="text-xs text-muted-foreground">
+          1 hard to reach, 5 easy
+        </span>
+      </div>
+      <div className="grid gap-2">
+        {grouped.map((group, index) => (
+          <div key={group.score} className="grid grid-cols-[24px_1fr] gap-3">
+            <span className="text-sm font-semibold text-muted-foreground">
+              {group.score}
+            </span>
+            <div className="min-h-8 rounded-lg bg-muted/50 p-1.5">
+              <div className="flex flex-wrap gap-1.5">
+                {group.points.length ? (
+                  group.points.map((point, pointIndex) => (
+                    <span
+                      key={`${point.student}-${point.pillar}-${pointIndex}`}
+                      title={`${point.student}: ${point.pillar}`}
+                      className="rounded-full px-2 py-1 text-xs font-semibold text-white"
+                      style={{
+                        backgroundColor:
+                          pillarColors[(index + pointIndex) % pillarColors.length],
+                      }}
+                    >
+                      {point.rank ? `${point.rank}. ` : ''}
+                      {point.pillar}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-muted-foreground">None</span>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
 
-function RosterPanel({ participants }: { participants: Array<{ _id: string; displayName?: string }> }) {
+function RosterPanel({
+  participants,
+}: {
+  participants: Array<{ _id: string; displayName?: string }>
+}) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-slate-950">Roster</h2>
-        <span className="text-xs text-slate-500">{participants.length} joined</span>
-      </div>
-      <div className="space-y-2">
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardTitle className="text-base">Roster</CardTitle>
+        <span className="text-xs text-muted-foreground">
+          {participants.length} joined
+        </span>
+      </CardHeader>
+      <CardContent className="space-y-2">
         {participants.length ? (
           participants.map((participant) => (
             <div key={participant._id} className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-sm text-slate-700">
+              <span className="text-sm text-foreground">
                 {participant.displayName || 'Student'}
               </span>
             </div>
           ))
         ) : (
-          <p className="text-sm text-slate-500">Waiting for students.</p>
+          <p className="text-sm text-muted-foreground">Waiting for students.</p>
         )}
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -554,33 +789,37 @@ function ChatPanel({
   }>
 }) {
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2">
-        <MessageSquareText className="h-4 w-4 text-slate-500" />
-        <h2 className="text-sm font-semibold text-slate-950">Live chat</h2>
-      </div>
-      <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1">
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <MessageSquareText className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="text-base">Live chat</CardTitle>
+        </div>
+      </CardHeader>
+      <CardContent className="max-h-[560px] space-y-3 overflow-y-auto pr-4">
         {messages.length ? (
           messages.slice(-80).map((message) => (
-            <div key={message._id} className="rounded-xl bg-slate-50 p-3">
+            <div key={message._id} className="rounded-lg bg-muted/60 p-3">
               <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-slate-700">
+                <span className="text-xs font-semibold text-foreground">
                   {message.displayName || message.authorRole}
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-muted-foreground">
                   {new Date(message.createdAt).toLocaleTimeString([], {
                     hour: 'numeric',
                     minute: '2-digit',
                   })}
                 </span>
               </div>
-              <p className="text-sm leading-5 text-slate-700">{message.body}</p>
+              <p className="text-sm leading-5 text-foreground">
+                {message.body}
+              </p>
             </div>
           ))
         ) : (
-          <p className="text-sm text-slate-500">No messages yet.</p>
+          <p className="text-sm text-muted-foreground">No messages yet.</p>
         )}
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   )
 }

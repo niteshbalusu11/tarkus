@@ -21,8 +21,9 @@ const PILLARS_CONFIG = {
   prompts: [
     'Who has the actual power to change the uniform policy?',
     'What groups, institutions, or people help keep the current policy in place?',
-    'Rate each pillar by importance and accessibility.',
-    'Which pillars would you approach first, and why?',
+    'Rate each pillar by accessibility from 1 to 5.',
+    'Order your first, second, and third moves, then explain why.',
+    'Reflect on how accessibility changed your strategy.',
   ],
 }
 
@@ -129,6 +130,67 @@ function displayNameFromParticipant(
   identity: UserIdentity,
 ) {
   return participant?.displayName?.trim() || displayNameFromIdentity(identity)
+}
+
+function assertShortText(value: unknown, label: string, maxLength = 2000) {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error(`${label} is required`)
+  }
+  if (value.length > maxLength) {
+    throw new Error(`${label} is too long`)
+  }
+}
+
+function validatePillarsPayload(payload: unknown) {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Pillars payload is required')
+  }
+
+  const value = payload as {
+    version?: unknown
+    powerHolder?: unknown
+    decisionMaker?: unknown
+    pillars?: unknown
+    moves?: unknown
+    sequence?: unknown
+    reflection?: unknown
+  }
+
+  if (!Array.isArray(value.pillars) || value.pillars.length === 0) {
+    throw new Error('At least one pillar is required')
+  }
+  if (value.pillars.length > 10) {
+    throw new Error('Pillars are limited to 10')
+  }
+
+  if (value.version === 2) {
+    assertShortText(value.powerHolder, 'Power holder')
+    if (!Array.isArray(value.moves) || value.moves.length < 3) {
+      throw new Error('Three ordered moves are required')
+    }
+    for (const [index, rawPillar] of value.pillars.entries()) {
+      const pillar = rawPillar as { name?: unknown; accessibility?: unknown }
+      assertShortText(pillar.name, `Pillar ${index + 1} name`, 120)
+      const accessibility = Number(pillar.accessibility)
+      if (
+        !Number.isFinite(accessibility) ||
+        accessibility < 1 ||
+        accessibility > 5
+      ) {
+        throw new Error('Pillar accessibility must be between 1 and 5')
+      }
+    }
+    for (const [index, rawMove] of value.moves.entries()) {
+      const move = rawMove as { pillarName?: unknown; why?: unknown }
+      assertShortText(move.pillarName, `Move ${index + 1} pillar`, 120)
+      assertShortText(move.why, `Move ${index + 1} reason`)
+    }
+    assertShortText(value.reflection, 'Reflection')
+    return
+  }
+
+  assertShortText(value.decisionMaker, 'Decision maker')
+  assertShortText(value.reflection, 'Reflection')
 }
 
 export const createSession = mutation({
@@ -362,6 +424,7 @@ export const submitPillarsExercise = mutation({
     if (access.role !== 'student') {
       throw new Error('Only students can submit assessments')
     }
+    validatePillarsPayload(args.payload)
     const existing = await ctx.db
       .query('activitySubmissions')
       .withIndex('by_activityId_and_studentTokenIdentifier', (q) =>
@@ -576,15 +639,29 @@ export const seedDemoSession = mutation({
         )
         .unique()
       const payload = {
-        decisionMaker: submission.decisionMaker,
-        pillars: submission.pillars.map(([name, importance, accessibility], index) => ({
+        version: 2,
+        exercise: 'school-uniform-pillars',
+        scenario: PILLARS_CONFIG.scenario,
+        powerHolder: submission.decisionMaker,
+        pillars: submission.pillars.map(([name, , accessibility], index) => ({
           id: `${submission.name}-${index}`,
           name,
-          importance,
           accessibility,
-          rationale: index === 0 ? 'This is where the current policy seems most connected.' : '',
+          role:
+            index === 0
+              ? 'This is where the current policy seems most connected.'
+              : '',
+          notes: '',
         })),
-        sequence: submission.pillars.slice(0, 3).map(([name]) => name),
+        moves: submission.pillars.slice(0, 3).map(([name], index) => ({
+          rank: index + 1,
+          pillarId: `${submission.name}-${index}`,
+          pillarName: name,
+          why:
+            index === 0
+              ? 'Start where leverage and access overlap enough to learn fast.'
+              : 'This follows after building support through the earlier pillar.',
+        })),
         reflection:
           'I started with the formal decision-maker, but accessibility changed the order I would approach people.',
       }
@@ -677,9 +754,31 @@ function fallbackAnalysis(input: AnalysisInput) {
   const submissions = input.submissions
   const allPillars = submissions.flatMap((submission) => {
     const payload = submission.payload as {
-      pillars?: Array<{ name?: string; importance?: number; accessibility?: number }>
+      pillars?: Array<{ name?: string; accessibility?: number }>
     }
     return payload.pillars || []
+  })
+  const normalizedSubmissions = submissions.map((submission) => {
+    const payload = submission.payload as {
+      version?: number
+      powerHolder?: string
+      decisionMaker?: string
+      pillars?: Array<{ name?: string; accessibility?: number }>
+      moves?: Array<{ pillarName?: string; why?: string }>
+      sequence?: Array<string>
+      reflection?: string
+    }
+    const pillars = payload.pillars || []
+    const moves =
+      payload.moves ||
+      (payload.sequence || []).map((pillarName) => ({ pillarName, why: '' }))
+    return {
+      displayName: submission.displayName || 'Student',
+      powerHolder: payload.powerHolder || payload.decisionMaker || '',
+      pillars,
+      moves,
+      reflection: payload.reflection || '',
+    }
   })
   const pillarNames = allPillars
     .map((pillar) => pillar.name?.trim())
@@ -700,6 +799,73 @@ function fallbackAnalysis(input: AnalysisInput) {
   const mentionsConfusion = messages.filter((message) =>
     /confus|not sure|unclear|difference|counts/i.test(message.body),
   )
+  const rubricCounts = new Map<string, number>()
+  let readyCount = 0
+  for (const submission of normalizedSubmissions) {
+    const names = submission.pillars
+      .map((pillar) => pillar.name?.toLowerCase() || '')
+      .join(' ')
+    const allText = [
+      submission.powerHolder,
+      names,
+      submission.moves.map((move) => `${move.pillarName} ${move.why}`).join(' '),
+      submission.reflection,
+    ]
+      .join(' ')
+      .toLowerCase()
+    const flags = new Set<string>()
+    if (/\beveryone\b|\bsociety\b|\bthe system\b/.test(submission.powerHolder)) {
+      flags.add('RF-01')
+    }
+    if (/expensive|unfair|comfort|freedom|problem/.test(names)) {
+      flags.add('RF-03')
+    }
+    if (/petition|protest|walkout|strike|social media|awareness/.test(names)) {
+      flags.add('RF-04')
+    }
+    if (
+      submission.pillars.length < 4 ||
+      !/supplier|vendor|district|office|staff|alumni|media|board/.test(names)
+    ) {
+      flags.add('RF-06')
+    }
+    if (
+      submission.pillars.length > 2 &&
+      new Set(submission.pillars.map((pillar) => pillar.accessibility)).size ===
+        1
+    ) {
+      flags.add('RF-08')
+    }
+    if (/\bawareness\b|\bspread the word\b/.test(allText)) {
+      flags.add('RF-09')
+    }
+    if (/\bright thing\b|\bwrong\b|\bunjust\b|\bmoral\b/.test(allText)) {
+      flags.add('RF-10')
+    }
+    if (
+      submission.powerHolder.trim() &&
+      submission.pillars.length >= 4 &&
+      submission.moves.length >= 3 &&
+      flags.size === 0
+    ) {
+      readyCount += 1
+    }
+    for (const flag of flags) {
+      rubricCounts.set(flag, (rubricCounts.get(flag) || 0) + 1)
+    }
+  }
+  const commonErrors = [...rubricCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([code, count]) => ({ code, count, label: rubricLabel(code) }))
+  const foundationalErrorCount = commonErrors
+    .filter((flag) => ['RF-01', 'RF-03', 'RF-04', 'RF-06'].includes(flag.code))
+    .reduce((max, flag) => Math.max(max, flag.count), 0)
+  const recommendation =
+    submissions.length > 0 && foundationalErrorCount / submissions.length > 0.4
+      ? 'FULL_RETEACH'
+      : submissions.length > 0 && readyCount / submissions.length >= 0.7
+        ? 'ADVANCE'
+        : 'RETEACH_ONE_CONCEPT'
 
   return {
     teacherBrief: [
@@ -736,6 +902,26 @@ function fallbackAnalysis(input: AnalysisInput) {
         ).length,
       },
     ],
+    readiness: {
+      readyCount,
+      totalCount: submissions.length,
+      recommendation,
+    },
+    commonErrors,
+    strongestResponse: normalizedSubmissions[0]
+      ? {
+          studentLabel: normalizedSubmissions[0].displayName,
+          step: 'Pillars map',
+          reason: 'Submitted a complete map with ordered first moves.',
+        }
+      : undefined,
+    collectiveBlindSpot:
+      commonErrors[0]?.label ||
+      'Waiting for enough submissions to identify a shared blind spot.',
+    trainerDebriefPrompt:
+      commonErrors[0]?.code === 'RF-06'
+        ? 'Ask the room which hidden actors help the uniform policy stay in place even if they do not formally decide it.'
+        : 'Ask why the first move is reachable enough to create leverage before approaching formal authority.',
     pillarsInsights: {
       consensus: common,
       gaps:
@@ -745,6 +931,27 @@ function fallbackAnalysis(input: AnalysisInput) {
       sequencing:
         'Students tend to name formal authority first; use the debrief to test whether accessibility should change the first approach.',
     },
+  }
+}
+
+function rubricLabel(code: string) {
+  switch (code) {
+    case 'RF-01':
+      return 'Treating power as one monolithic actor'
+    case 'RF-03':
+      return 'Confusing a grievance with a power holder'
+    case 'RF-04':
+      return 'Confusing tactics with pillars'
+    case 'RF-06':
+      return 'Missing non-obvious pillars'
+    case 'RF-08':
+      return 'Treating all pillars as equally reachable'
+    case 'RF-09':
+      return 'Using awareness as the whole strategy'
+    case 'RF-10':
+      return 'Leaning on moral framing instead of leverage'
+    default:
+      return code
   }
 }
 
@@ -769,7 +976,7 @@ async function openRouterAnalysis(input: AnalysisInput) {
         {
           role: 'system',
           content:
-            'You are TARKUS, a teacher-only AI synthesis layer for an in-person strategic nonviolence class. Students never see your output. Do not grade students. Do not give tactical advice. Summarize class-level patterns, unclear concepts, recurring questions, emotional tone, and Pillars of Support exercise results. Be concise. Return JSON only. Required shape: {"teacherBrief":["string"],"recurringQuestions":["string"],"unclearConcepts":["string"],"emotionalTone":{"label":"string","explanation":"string"},"chatClusters":[{"label":"string","count":number}],"pillarsInsights":{"consensus":["string"],"gaps":["string"],"sequencing":"string"}}. Do not return markdown, prose outside JSON, or strings where arrays are required.',
+            'You are TARKUS, a teacher-only AI synthesis layer for an in-person strategic nonviolence class. Students never see your output. Do not grade students. Do not give advice to students. Help the trainer understand class-level patterns only. Analyze the Pillars of Support school-uniform exercise using these trainer rubric flags: RF-01 monolithic model, RF-03 confusing power with grievance, RF-04 confusing pillars with tactics, RF-06 missing non-obvious pillars, RF-07 push vs pull, RF-08 all pillars equal, RF-09 awareness campaign as strategy, RF-10 moral framing, SK-08 prior experience or repression concern rather than conceptual confusion. Return JSON only. Required shape: {"teacherBrief":["string"],"recurringQuestions":["string"],"unclearConcepts":["string"],"emotionalTone":{"label":"string","explanation":"string"},"chatClusters":[{"label":"string","count":number}],"readiness":{"readyCount":number,"totalCount":number,"recommendation":"ADVANCE|RETEACH_ONE_CONCEPT|FULL_RETEACH"},"commonErrors":[{"code":"string","label":"string","count":number}],"strongestResponse":{"studentLabel":"string","step":"string","reason":"string"},"collectiveBlindSpot":"string","trainerDebriefPrompt":"string","pillarsInsights":{"consensus":["string"],"gaps":["string"],"sequencing":"string"}}. If more than 40 percent of submissions show the same foundational error RF-01 through RF-04, recommend FULL_RETEACH. Do not return markdown, prose outside JSON, or strings where arrays are required.',
         },
         {
           role: 'user',

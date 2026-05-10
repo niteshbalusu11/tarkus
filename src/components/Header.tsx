@@ -1,6 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { Activity, LogIn, Monitor, Users } from 'lucide-react'
 import ClerkHeader from '../integrations/clerk/header-user'
+import { Button } from './ui/button'
 
 export default function Header() {
   return (
@@ -38,10 +39,12 @@ export default function Header() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          <Link to="/join" className="mobile-join">
-            <LogIn className="h-4 w-4" />
-            Join
-          </Link>
+          <Button asChild className="md:hidden" size="sm" variant="outline">
+            <Link to="/join">
+              <LogIn className="h-4 w-4" />
+              Join
+            </Link>
+          </Button>
           <ClerkHeader />
         </div>
       </nav>

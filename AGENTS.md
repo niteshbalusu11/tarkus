@@ -23,6 +23,7 @@ AI synthesis.
 ## Tech Stack
 
 - React 19 with Vite, TanStack Router, and TanStack Start.
+- shadcn UI components for consistent styling.
 - Tailwind CSS v4 for styling.
 - Convex for the backend, real-time queries, mutations, actions, and data schema.
 - Clerk for authentication. Students and teachers must authenticate before using

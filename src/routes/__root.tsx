@@ -2,6 +2,7 @@ import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
 import { AccountOnboardingGate } from '../components/AuthGate'
 import Footer from '../components/Footer'
 import Header from '../components/Header'
+import { TooltipProvider } from '../components/ui/tooltip'
 
 import ClerkProvider from '../integrations/clerk/provider'
 
@@ -45,9 +46,11 @@ function RootDocument({ children }: { children: React.ReactNode }) {
       <body className="font-sans antialiased [overflow-wrap:anywhere] selection:bg-[rgba(79,184,178,0.24)]">
         <ClerkProvider>
           <ConvexProvider>
-            <Header />
-            <AccountOnboardingGate>{children}</AccountOnboardingGate>
-            <Footer />
+            <TooltipProvider delayDuration={200}>
+              <Header />
+              <AccountOnboardingGate>{children}</AccountOnboardingGate>
+              <Footer />
+            </TooltipProvider>
           </ConvexProvider>
         </ClerkProvider>
         <Scripts />

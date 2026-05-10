@@ -6,6 +6,17 @@ import { ArrowRight, KeyRound } from 'lucide-react'
 
 import AuthGate from '../components/AuthGate'
 import { api } from '../../convex/_generated/api'
+import { Alert, AlertDescription } from '../components/ui/alert'
+import { Button } from '../components/ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '../components/ui/card'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import { resolveJoinDisplayName } from '../lib/auth'
 
 export const Route = createFileRoute('/join')({
@@ -43,65 +54,71 @@ function JoinClass() {
         params: { sessionId: result.sessionId },
       })
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Could not join class')
+      setError(
+        caught instanceof Error ? caught.message : 'Could not join class',
+      )
     } finally {
       setIsJoining(false)
     }
   }
 
   return (
-    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-slate-50 px-4 py-10">
-      <section className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-200/70">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-50 text-teal-700">
-          <KeyRound className="h-5 w-5" />
-        </div>
-        <h1 className="mt-5 text-3xl font-semibold tracking-tight text-slate-950">
-          Join a live class
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-slate-600">
-          Enter the short code from your trainer. Your chat and assessment
-          responses will be visible to the class and trainer.
-        </p>
+    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--background)] px-4 py-10">
+      <Card className="w-full max-w-lg border-[var(--line)] bg-[var(--surface-strong)] shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
+        <CardHeader>
+          <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-lg bg-[var(--accent)] text-[var(--amber-deep)]">
+            <KeyRound className="h-5 w-5" />
+          </div>
+          <CardTitle className="font-serif text-3xl">
+            Join a live class
+          </CardTitle>
+          <CardDescription className="leading-6">
+            Enter the short code from your trainer. Your chat and assessment
+            responses will be visible to the class and trainer.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-4" onSubmit={handleSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="join-display-name">Display name optional</Label>
+              <Input
+                id="join-display-name"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="Name or alias"
+              />
+            </div>
 
-        <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
-          <label className="block">
-            <span className="form-label">Display name optional</span>
-            <input
-              className="text-input"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Name or alias"
-            />
-          </label>
+            <div className="space-y-2">
+              <Label htmlFor="join-session-code">Session code</Label>
+              <Input
+                id="join-session-code"
+                className="h-14 font-mono text-2xl uppercase tracking-[0.2em]"
+                value={code}
+                onChange={(event) => setCode(event.target.value.toUpperCase())}
+                placeholder="ABC123"
+                maxLength={6}
+                autoFocus
+              />
+            </div>
 
-          <label className="block">
-            <span className="form-label">Session code</span>
-            <input
-              className="text-input font-mono text-2xl uppercase tracking-[0.2em]"
-              value={code}
-              onChange={(event) => setCode(event.target.value.toUpperCase())}
-              placeholder="ABC123"
-              maxLength={6}
-              autoFocus
-            />
-          </label>
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
 
-          {error ? (
-            <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
-          ) : null}
-
-          <button
-            className="primary-action w-full justify-center"
-            disabled={isJoining || code.trim().length < 4}
-            type="submit"
-          >
-            Join class
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </form>
-      </section>
+            <Button
+              className="w-full"
+              disabled={isJoining || code.trim().length < 4}
+              type="submit"
+            >
+              Join class
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </main>
   )
 }

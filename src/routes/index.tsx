@@ -1,5 +1,6 @@
 import { Link, createFileRoute } from '@tanstack/react-router'
 import { ArrowRight, KeyRound, Monitor } from 'lucide-react'
+import { Button } from '../components/ui/button'
 
 export const Route = createFileRoute('/')({ component: App })
 
@@ -16,18 +17,25 @@ function App() {
             teacher-only AI synthesis.
           </p>
           <div className="home-actions">
-            <Link to="/teacher" className="primary-action">
-              <Monitor className="h-4 w-4" />
-              Teacher dashboard
-            </Link>
-            <Link to="/join" className="secondary-action">
-              <KeyRound className="h-4 w-4" />
-              Join class
-            </Link>
+            <Button asChild size="lg">
+              <Link to="/teacher">
+                <Monitor className="h-4 w-4" />
+                Teacher dashboard
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link to="/join">
+                <KeyRound className="h-4 w-4" />
+                Join class
+              </Link>
+            </Button>
           </div>
         </div>
 
-        <div className="archive-panel rise-in" aria-label="TARKUS live session preview">
+        <div
+          className="archive-panel rise-in"
+          aria-label="TARKUS live session preview"
+        >
           <div className="archive-strip">
             <span>Class room active</span>
             <span>Code expires 6h</span>
@@ -42,7 +50,9 @@ function App() {
             </div>
             <div className="archive-brief">
               <p>Teacher brief</p>
-              <strong>Students are separating formal authority from daily enforcement.</strong>
+              <strong>
+                Students are separating formal authority from daily enforcement.
+              </strong>
               <span>Recurring question: what counts as a pillar?</span>
             </div>
           </div>
@@ -54,10 +64,12 @@ function App() {
           <p className="home-kicker">Working surface</p>
           <h2>Human trainer in front. AI synthesis behind.</h2>
         </div>
-        <Link to="/teacher" className="secondary-action">
-          Open dashboard
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+        <Button asChild variant="outline">
+          <Link to="/teacher">
+            Open dashboard
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        </Button>
       </section>
     </main>
   )

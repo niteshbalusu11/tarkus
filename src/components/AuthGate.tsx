@@ -5,6 +5,17 @@ import { GraduationCap, ShieldCheck } from 'lucide-react'
 import * as React from 'react'
 
 import { api } from '../../convex/_generated/api'
+import { Alert, AlertDescription } from './ui/alert'
+import { Button } from './ui/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from './ui/card'
+import { Input } from './ui/input'
+import { Label } from './ui/label'
 import {
   ONBOARDING_RETURN_TO_KEY,
   ONBOARDING_ROLE_KEY,
@@ -183,64 +194,69 @@ function OnboardingPanel({
 
   return (
     <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--warm-paper)] px-4 py-10">
-      <section className="w-full max-w-xl border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--amber)]">
-          Account setup
-        </p>
-        <h1 className="mt-3 font-serif text-3xl font-semibold tracking-tight text-[var(--charcoal)]">
-          Choose how you will use TARKUS
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-          This is part of sign up. Your choice is saved on the backend and
-          controls which class tools your account can access.
-        </p>
-
-        <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
-          <label className="block">
-            <span className="form-label">Display name</span>
-            <input
-              className="text-input"
-              value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="Name or alias"
-            />
-          </label>
-
-          <fieldset>
-            <legend className="form-label">Account type</legend>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <RoleOption
-                checked={role === 'student'}
-                description="Join a class with a short code."
-                icon={<GraduationCap className="h-5 w-5" />}
-                label="Student"
-                onChange={() => setRole('student')}
-              />
-              <RoleOption
-                checked={role === 'teacher'}
-                description="Create sessions and view AI synthesis."
-                icon={<ShieldCheck className="h-5 w-5" />}
-                label="Teacher"
-                onChange={() => setRole('teacher')}
+      <Card className="w-full max-w-xl border-[var(--line)] bg-[var(--surface)] shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
+        <CardHeader>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[var(--amber)]">
+            Account setup
+          </p>
+          <CardTitle className="font-serif text-3xl">
+            Choose how you will use TARKUS
+          </CardTitle>
+          <CardDescription className="leading-6">
+            This is part of sign up. Your choice is saved on the backend and
+            controls which class tools your account can access.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="space-y-5" onSubmit={handleSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="onboarding-display-name">Display name</Label>
+              <Input
+                id="onboarding-display-name"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                placeholder="Name or alias"
               />
             </div>
-          </fieldset>
 
-          {error ? (
-            <p className="border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </p>
-          ) : null}
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium text-[var(--foreground)]">
+                Account type
+              </legend>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <RoleOption
+                  checked={role === 'student'}
+                  description="Join a class with a short code."
+                  icon={<GraduationCap className="h-5 w-5" />}
+                  label="Student"
+                  onChange={() => setRole('student')}
+                />
+                <RoleOption
+                  checked={role === 'teacher'}
+                  description="Create sessions and view AI synthesis."
+                  icon={<ShieldCheck className="h-5 w-5" />}
+                  label="Teacher"
+                  onChange={() => setRole('teacher')}
+                />
+              </div>
+            </fieldset>
 
-          <button
-            className="primary-action w-full justify-center"
-            disabled={isSaving || !displayName.trim()}
-            type="submit"
-          >
-            {isSaving ? 'Saving...' : 'Continue'}
-          </button>
-        </form>
-      </section>
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+
+            <Button
+              className="w-full"
+              disabled={isSaving || !displayName.trim()}
+              type="submit"
+            >
+              {isSaving ? 'Saving...' : 'Continue'}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </main>
   )
 }
@@ -294,18 +310,22 @@ function RoleMismatch({
   const destination = defaultPathForRole(actualRole)
   return (
     <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--warm-paper)] px-4 py-10">
-      <section className="w-full max-w-md border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
-        <h1 className="font-serif text-xl font-semibold tracking-tight text-[var(--charcoal)]">
-          This page is for {requiredRole}s
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-          Your account is set up as a {actualRole}. TARKUS enforces this in
-          Convex, so changing the URL will not bypass it.
-        </p>
-        <Link className="primary-action mt-5 inline-flex" to={destination}>
-          Go to your workspace
-        </Link>
-      </section>
+      <Card className="w-full max-w-md border-[var(--line)] bg-[var(--surface)] shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
+        <CardHeader>
+          <CardTitle className="font-serif">
+            This page is for {requiredRole}s
+          </CardTitle>
+          <CardDescription className="leading-6">
+            Your account is set up as a {actualRole}. TARKUS enforces this in
+            Convex, so changing the URL will not bypass it.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild>
+            <Link to={destination}>Go to your workspace</Link>
+          </Button>
+        </CardContent>
+      </Card>
     </main>
   )
 }
@@ -336,15 +356,15 @@ function AuthPanel({
 
   return (
     <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--warm-paper)] px-4 py-10">
-      <section className="w-full max-w-md border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
-        <h1 className="font-serif text-xl font-semibold tracking-tight text-[var(--charcoal)]">
-          {title}
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-          Use any test email while verification is disabled for the hackathon
-          build.
-        </p>
-        <div className="mt-6">
+      <Card className="w-full max-w-md border-[var(--line)] bg-[var(--surface)] shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
+        <CardHeader>
+          <CardTitle className="font-serif">{title}</CardTitle>
+          <CardDescription className="leading-6">
+            Use any test email while verification is disabled for the hackathon
+            build.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
           <SignIn
             routing="hash"
             forceRedirectUrl={redirectUrl}
@@ -352,8 +372,8 @@ function AuthPanel({
             signUpForceRedirectUrl={redirectUrl}
             signUpFallbackRedirectUrl={redirectUrl}
           />
-        </div>
-      </section>
+        </CardContent>
+      </Card>
     </main>
   )
 }
@@ -369,15 +389,18 @@ function LoadingState({ label }: { label: string }) {
 function ConvexDiagnostic() {
   return (
     <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center bg-[var(--warm-paper)] px-4 py-10">
-      <section className="w-full max-w-md border border-[var(--line)] bg-[var(--surface)] p-6 shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
-        <h1 className="font-serif text-xl font-semibold tracking-tight text-[var(--charcoal)]">
-          Convex session is still connecting
-        </h1>
-        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-          You are signed in with Clerk, but the backend token has not completed.
-          Try a hard refresh. If this persists, sign out and sign in again.
-        </p>
-      </section>
+      <Card className="w-full max-w-md border-[var(--line)] bg-[var(--surface)] shadow-[0_18px_50px_rgba(28,28,28,0.08)]">
+        <CardHeader>
+          <CardTitle className="font-serif">
+            Convex session is still connecting
+          </CardTitle>
+          <CardDescription className="leading-6">
+            You are signed in with Clerk, but the backend token has not
+            completed. Try a hard refresh. If this persists, sign out and sign
+            in again.
+          </CardDescription>
+        </CardHeader>
+      </Card>
     </main>
   )
 }

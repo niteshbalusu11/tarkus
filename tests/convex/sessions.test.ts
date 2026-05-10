@@ -166,17 +166,50 @@ describe('sessions auth and participant identity', () => {
       sessionId,
       activityId,
       payload: {
-        decisionMaker: 'School board',
+        version: 2,
+        exercise: 'school-uniform-pillars',
+        scenario: 'School uniform policy',
+        powerHolder: 'School board',
         pillars: [
           {
             id: 'principal',
             name: 'Principal',
-            importance: 4,
             accessibility: 3,
-            rationale: 'Can influence the board.',
+            role: 'Can influence the board.',
+          },
+          {
+            id: 'parents',
+            name: 'Parents association',
+            accessibility: 4,
+            role: 'Can pressure administrators.',
+          },
+          {
+            id: 'teachers',
+            name: 'Teachers',
+            accessibility: 5,
+            role: 'Enforce the policy daily.',
           },
         ],
-        sequence: ['Principal'],
+        moves: [
+          {
+            rank: 1,
+            pillarId: 'teachers',
+            pillarName: 'Teachers',
+            why: 'They are easy to reach and enforce the rule.',
+          },
+          {
+            rank: 2,
+            pillarId: 'parents',
+            pillarName: 'Parents association',
+            why: 'They can widen support.',
+          },
+          {
+            rank: 3,
+            pillarId: 'principal',
+            pillarName: 'Principal',
+            why: 'Approach with broader backing.',
+          },
+        ],
         reflection: 'Start with the principal before escalating.',
       },
     })
@@ -202,6 +235,37 @@ describe('sessions auth and participant identity', () => {
         type: 'pillars',
       },
     ])
+  })
+
+  it('validates structured Pillars v2 submissions', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Trainer')
+    await onboard(t, studentIdentity, 'student', 'Maya')
+    const { sessionId, activityId, code } = await teacher.mutation(
+      api.sessions.createSession,
+      {},
+    )
+
+    await student.mutation(api.sessions.joinSessionByCode, {
+      code,
+      displayName: 'Maya',
+    })
+
+    await expect(
+      student.mutation(api.sessions.submitPillarsExercise, {
+        sessionId,
+        activityId,
+        payload: {
+          version: 2,
+          powerHolder: 'Principal',
+          pillars: [{ id: 'teachers', name: 'Teachers', accessibility: 6 }],
+          moves: [],
+          reflection: 'Incomplete.',
+        },
+      }),
+    ).rejects.toThrow('Three ordered moves are required')
   })
 
   it('updates an existing participant name on rejoin and preserves anonymous chat', async () => {
