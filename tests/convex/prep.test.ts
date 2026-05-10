@@ -13,6 +13,7 @@ import {
   ensureImagePlacements,
   MAX_PRESENTATION_SLIDES,
   normalizeSlideSpec,
+  reconcilePresentationEditResult,
 } from '../../convex/prepNode'
 import { buildCappedSourceDocuments } from '../../convex/prepPrompt'
 import schema from '../../convex/schema'
@@ -791,5 +792,102 @@ describe('prep workspace auth', () => {
 
     expect(result?.slides[3].imageFileName).toBeUndefined()
     expect(result?.slides[4].imageFileName).toBe('el-salvador-map.png')
+  })
+
+  it('merges a targeted partial AI edit without dropping existing slides', () => {
+    const current = {
+      title: 'Expanded deck',
+      slides: Array.from({ length: 14 }, (_, index) => ({
+        id: `slide-${String(index + 1).padStart(2, '0')}`,
+        type: 'concept' as const,
+        title: `Slide ${index + 1}`,
+        bullets: [`Original point ${index + 1}`],
+        speakerNotes: `Original notes ${index + 1}`,
+      })),
+    }
+    const rawPartial = {
+      title: 'Expanded deck',
+      slides: [
+        {
+          type: 'concept',
+          title: 'Slide 5',
+          bullets: ['Updated only slide 5'],
+          speakerNotes: 'Updated notes 5',
+        },
+      ],
+    }
+    const normalized = normalizeSlideSpec(rawPartial, current)
+
+    const result = reconcilePresentationEditResult(
+      rawPartial,
+      current,
+      normalized,
+      'edit slide 5 to make it clearer',
+    )
+
+    expect(result.slides).toHaveLength(14)
+    expect(result.slides[4]).toMatchObject({
+      id: 'slide-05',
+      bullets: ['Updated only slide 5'],
+      speakerNotes: 'Updated notes 5',
+    })
+    expect(result.slides[13]).toMatchObject({
+      id: 'slide-14',
+      bullets: ['Original point 14'],
+    })
+  })
+
+  it('appends partial AI slide additions instead of replacing the deck', () => {
+    const current = {
+      title: 'Expanded deck',
+      slides: Array.from({ length: 12 }, (_, index) => ({
+        id: `slide-${String(index + 1).padStart(2, '0')}`,
+        type: 'concept' as const,
+        title: `Slide ${index + 1}`,
+        bullets: [`Original point ${index + 1}`],
+        speakerNotes: `Original notes ${index + 1}`,
+      })),
+    }
+    const rawPartial = {
+      title: 'Expanded deck',
+      slides: [
+        {
+          id: 'slide-13-case-comparison',
+          type: 'discussion',
+          title: 'Case comparison',
+          bullets: ['Compare El Salvador and Norway'],
+          speakerNotes: 'Invite students to identify the pillar pattern.',
+        },
+        {
+          id: 'slide-14-closing-reflection',
+          type: 'summary',
+          title: 'Closing reflection',
+          bullets: ['Name one reachable pillar'],
+          speakerNotes: 'Close with a concrete transfer prompt.',
+        },
+      ],
+    }
+    const normalized = normalizeSlideSpec(rawPartial, current)
+
+    const result = reconcilePresentationEditResult(
+      rawPartial,
+      current,
+      normalized,
+      'add a couple more slides',
+    )
+
+    expect(result.slides).toHaveLength(14)
+    expect(result.slides[0]).toMatchObject({
+      id: 'slide-01',
+      bullets: ['Original point 1'],
+    })
+    expect(result.slides[12]).toMatchObject({
+      id: 'slide-13-case-comparison',
+      title: 'Case comparison',
+    })
+    expect(result.slides[13]).toMatchObject({
+      id: 'slide-14-closing-reflection',
+      title: 'Closing reflection',
+    })
   })
 })

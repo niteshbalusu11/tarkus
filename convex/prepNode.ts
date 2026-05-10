@@ -902,15 +902,21 @@ export const refinePresentation = action({
       currentSlideSpec,
       allowedImageFileNames,
     )
+    const reconciledSlideSpec = reconcilePresentationEditResult(
+      result.output,
+      currentSlideSpec,
+      normalizedSlideSpec,
+      instruction,
+    )
     const slideSpec =
       shouldAutoPlaceImagesOnEdit(
         instruction,
         currentSlideSpec,
-        normalizedSlideSpec,
+        reconciledSlideSpec,
         allowedImageFileNames,
       )
-        ? ensureImagePlacements(normalizedSlideSpec, allowedImageFileNames)
-        : normalizedSlideSpec
+        ? ensureImagePlacements(reconciledSlideSpec, allowedImageFileNames)
+        : reconciledSlideSpec
     await ctx.runMutation(internal.prep.savePresentationSlideSpecDraft, {
       presentationId: args.presentationId,
       teacherTokenIdentifier: identity.tokenIdentifier,
@@ -1027,6 +1033,159 @@ export function normalizeSlideSpec(
       .filter((slide) => slide.title.trim())
       .slice(0, MAX_PRESENTATION_SLIDES),
   }
+}
+
+export function reconcilePresentationEditResult(
+  rawValue: unknown,
+  currentSlideSpec: SlideSpec,
+  normalizedSlideSpec: SlideSpec,
+  instruction: string,
+): SlideSpec {
+  const candidate = rawValue as Partial<SlideSpec> | null
+  const candidateSlides = Array.isArray(candidate?.slides)
+    ? candidate.slides
+    : []
+  if (!candidateSlides.length) return currentSlideSpec
+  if (canReplaceDeckSlides(instruction, candidateSlides.length, currentSlideSpec)) {
+    return normalizedSlideSpec
+  }
+
+  const targetSlideIndexes = getReferencedSlideIndexes(instruction)
+  const mergedSlides = [...currentSlideSpec.slides]
+  const appendedSlides: SlideSpec['slides'] = []
+  const usedIndexes = new Set<number>()
+  let changedExistingSlide = false
+
+  for (const [candidateIndex, slide] of normalizedSlideSpec.slides.entries()) {
+    const rawSlide = candidateSlides[candidateIndex] as Record<string, unknown>
+    const matchedIndex = findExistingSlideIndexForEdit(
+      currentSlideSpec,
+      rawSlide,
+      slide,
+      targetSlideIndexes,
+      candidateIndex,
+      usedIndexes,
+    )
+    if (matchedIndex >= 0) {
+      mergedSlides[matchedIndex] = mergeSlideForEdit(
+        currentSlideSpec.slides[matchedIndex],
+        slide,
+      )
+      usedIndexes.add(matchedIndex)
+      changedExistingSlide = true
+      continue
+    }
+    appendedSlides.push(slide)
+  }
+
+  const shouldAppend =
+    hasSlideAdditionIntent(instruction) || (!changedExistingSlide && appendedSlides.length > 0)
+  const slides = shouldAppend
+    ? [...mergedSlides, ...renumberNewSlideIds(appendedSlides, mergedSlides.length)]
+    : mergedSlides
+
+  return {
+    title: normalizedSlideSpec.title || currentSlideSpec.title,
+    slides: slides.slice(0, MAX_PRESENTATION_SLIDES),
+  }
+}
+
+function canReplaceDeckSlides(
+  instruction: string,
+  candidateSlideCount: number,
+  currentSlideSpec: SlideSpec,
+) {
+  if (hasSlideRemovalOrReductionIntent(instruction)) return true
+  if (candidateSlideCount >= currentSlideSpec.slides.length) return true
+  return false
+}
+
+function findExistingSlideIndexForEdit(
+  currentSlideSpec: SlideSpec,
+  rawSlide: Record<string, unknown>,
+  normalizedSlide: SlideSpec['slides'][number],
+  targetSlideIndexes: Array<number>,
+  candidateIndex: number,
+  usedIndexes: Set<number>,
+) {
+  const rawId = typeof rawSlide.id === 'string' ? rawSlide.id.trim() : ''
+  const id = rawId || normalizedSlide.id || ''
+  if (id) {
+    const byId = currentSlideSpec.slides.findIndex((slide) => slide.id === id)
+    if (byId >= 0 && !usedIndexes.has(byId)) return byId
+  }
+
+  const title = normalizedSlide.title.trim().toLowerCase()
+  const titleMatches = currentSlideSpec.slides
+    .map((slide, index) => ({ slide, index }))
+    .filter(
+      ({ slide, index }) =>
+        !usedIndexes.has(index) &&
+        slide.title.trim().toLowerCase() === title,
+    )
+  if (titleMatches.length === 1) return titleMatches[0].index
+
+  if (targetSlideIndexes.length === 1 && candidateIndex === 0) {
+    const targetIndex = targetSlideIndexes[0]
+    if (
+      targetIndex >= 0 &&
+      targetIndex < currentSlideSpec.slides.length &&
+      !usedIndexes.has(targetIndex)
+    ) {
+      return targetIndex
+    }
+  }
+
+  if (targetSlideIndexes.length > candidateIndex) {
+    const targetIndex = targetSlideIndexes[candidateIndex]
+    if (
+      targetIndex >= 0 &&
+      targetIndex < currentSlideSpec.slides.length &&
+      !usedIndexes.has(targetIndex)
+    ) {
+      return targetIndex
+    }
+  }
+
+  return -1
+}
+
+function mergeSlideForEdit(
+  currentSlide: SlideSpec['slides'][number],
+  updatedSlide: SlideSpec['slides'][number],
+): SlideSpec['slides'][number] {
+  return {
+    ...currentSlide,
+    ...updatedSlide,
+    id: currentSlide.id || updatedSlide.id,
+    imageFileName:
+      updatedSlide.imageFileName === undefined
+        ? currentSlide.imageFileName
+        : updatedSlide.imageFileName,
+  }
+}
+
+function renumberNewSlideIds(
+  slides: SlideSpec['slides'],
+  existingSlideCount: number,
+) {
+  return slides.map((slide, index) => ({
+    ...slide,
+    id: slide.id || slideIdFor(existingSlideCount + index, slide.title),
+  }))
+}
+
+function getReferencedSlideIndexes(instruction: string) {
+  const indexes: Array<number> = []
+  const pattern = /\bslide\s+(\d+)\b/gi
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(instruction)) !== null) {
+    const index = Number(match[1]) - 1
+    if (Number.isInteger(index) && index >= 0 && !indexes.includes(index)) {
+      indexes.push(index)
+    }
+  }
+  return indexes
 }
 
 function reusableFallbackSlideId(
@@ -1214,6 +1373,24 @@ export function applyDeterministicPresentationEdit(
 function hasImagePlacementIntent(instruction: string) {
   return /\b(image|images|photo|photos|picture|pictures|visual|visuals|diagram|diagrams)\b/i.test(
     instruction,
+  )
+}
+
+function hasSlideAdditionIntent(instruction: string) {
+  return /\b(add|append|insert|create|include|expand)\b.{0,48}\b(slide|slides)\b/i.test(
+    instruction,
+  )
+}
+
+function hasSlideRemovalOrReductionIntent(instruction: string) {
+  return (
+    /\b(remove|delete|drop|cut)\b.{0,48}\b(slide|slides)\b/i.test(
+      instruction,
+    ) ||
+    /\b(shorten|reduce|condense|trim)\b.{0,48}\b(to\s+)?\d+\s+slides?\b/i.test(
+      instruction,
+    ) ||
+    /\b(make|turn)\b.{0,32}\b(to\s+)?\d+\s+slides?\b/i.test(instruction)
   )
 }
 
