@@ -401,6 +401,38 @@ describe('sessions auth and participant identity', () => {
     expect(afterRelease.activity?.status).toBe('open')
   })
 
+  it('seeds demo intake and Pillars submissions without opening the exercise', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Trainer')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {})
+
+    await teacher.mutation(api.sessions.seedDemoSession, { sessionId })
+
+    const pillarsActivity = await teacher.query(
+      api.sessions.getTeacherPillarsActivity,
+      { sessionId },
+    )
+    const pillarsSubmissions = await teacher.query(
+      api.sessions.listActivitySubmissions,
+      { sessionId },
+    )
+    const intakeSubmissions = await teacher.query(
+      api.sessions.listIntakeSubmissions,
+      { sessionId },
+    )
+
+    expect(pillarsActivity?.status).toBe('closed')
+    expect(pillarsSubmissions).toHaveLength(6)
+    expect(intakeSubmissions).toHaveLength(6)
+    expect(intakeSubmissions[0]).toMatchObject({
+      type: 'intake',
+      payload: {
+        form: 'student-intake',
+      },
+    })
+  })
+
   it('uses the participant display name for chat and Pillars submissions', async () => {
     const t = newTestBackend()
     const teacher = t.withIdentity(teacherIdentity)

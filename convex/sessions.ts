@@ -979,14 +979,13 @@ export const seedDemoSession = mutation({
     if (session.status === 'ended') {
       throw new Error('Ended classes cannot be changed')
     }
-    const activity = await ctx.db
-      .query('activities')
-      .withIndex('by_sessionId_and_type', (q) =>
-        q.eq('sessionId', args.sessionId).eq('type', 'pillars'),
-      )
-      .first()
+    const activity = await ensurePillarsActivity(ctx, args.sessionId)
     if (!activity) {
       throw new Error('Pillars activity not found')
+    }
+    const intakeActivity = await ensureIntakeActivity(ctx, args.sessionId)
+    if (!intakeActivity) {
+      throw new Error('Intake form unavailable')
     }
 
     const now = Date.now()
@@ -1016,6 +1015,123 @@ export const seedDemoSession = mutation({
           displayName: name,
           joinedAt: now + index,
           lastSeenAt: now + index,
+        })
+      }
+    }
+
+    const intakeSubmissions = [
+      {
+        name: 'Maya',
+        ageRange: '18-24',
+        country: 'United States',
+        priorTraining: 'No, this is my first time',
+        violenceEffective: 2,
+        weaponsMoneyPower: 3,
+        peoplePower: 5,
+        nonviolenceWord: 'discipline',
+        authoritarianChange:
+          'Organized pressure can change what leaders believe is possible.',
+      },
+      {
+        name: 'Omar',
+        ageRange: '25-34',
+        country: 'Jordan',
+        priorTraining: 'I have attended one workshop or training',
+        violenceEffective: 3,
+        weaponsMoneyPower: 4,
+        peoplePower: 4,
+        nonviolenceWord: 'coordination',
+        authoritarianChange:
+          'Broad participation can make repression more costly.',
+      },
+      {
+        name: 'Leila',
+        ageRange: '18-24',
+        country: 'Lebanon',
+        priorTraining: 'No, this is my first time',
+        violenceEffective: 2,
+        weaponsMoneyPower: 3,
+        peoplePower: 4,
+        nonviolenceWord: 'solidarity',
+        authoritarianChange:
+          'People can shift institutions when enough groups stop cooperating.',
+      },
+      {
+        name: 'Sam',
+        ageRange: '35-44',
+        country: 'Canada',
+        priorTraining: 'I have studied or practiced this before',
+        violenceEffective: 4,
+        weaponsMoneyPower: 4,
+        peoplePower: 3,
+        nonviolenceWord: 'strategy',
+        authoritarianChange:
+          'Change depends on finding leverage, not just expressing opposition.',
+      },
+      {
+        name: 'Iris',
+        ageRange: '25-34',
+        country: 'Philippines',
+        priorTraining: 'No, this is my first time',
+        violenceEffective: 1,
+        weaponsMoneyPower: 2,
+        peoplePower: 5,
+        nonviolenceWord: 'numbers',
+        authoritarianChange:
+          'If enough ordinary people act together, officials may defect.',
+      },
+      {
+        name: 'Niko',
+        ageRange: '18-24',
+        country: 'Serbia',
+        priorTraining: 'I have attended one workshop or training',
+        violenceEffective: 2,
+        weaponsMoneyPower: 3,
+        peoplePower: 5,
+        nonviolenceWord: 'pressure',
+        authoritarianChange:
+          'Movements can expose dependencies that rulers usually hide.',
+      },
+    ]
+
+    for (const submission of intakeSubmissions) {
+      const token = `demo:${args.sessionId}:${submission.name}`
+      const existing = await ctx.db
+        .query('activitySubmissions')
+        .withIndex('by_activityId_and_studentTokenIdentifier', (q) =>
+          q
+            .eq('activityId', intakeActivity._id)
+            .eq('studentTokenIdentifier', token),
+        )
+        .unique()
+      const payload = {
+        version: 1,
+        form: 'student-intake',
+        ageRange: submission.ageRange,
+        country: submission.country,
+        priorTraining: submission.priorTraining,
+        violenceEffective: submission.violenceEffective,
+        weaponsMoneyPower: submission.weaponsMoneyPower,
+        peoplePower: submission.peoplePower,
+        nonviolenceWord: submission.nonviolenceWord,
+        authoritarianChange: submission.authoritarianChange,
+      }
+      if (existing) {
+        await ctx.db.patch(existing._id, {
+          displayName: submission.name,
+          payload,
+          updatedAt: now,
+        })
+      } else {
+        await ctx.db.insert('activitySubmissions', {
+          sessionId: args.sessionId,
+          activityId: intakeActivity._id,
+          studentTokenIdentifier: token,
+          displayName: submission.name,
+          type: 'intake',
+          payload,
+          submittedAt: now,
+          updatedAt: now,
         })
       }
     }
