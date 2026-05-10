@@ -168,6 +168,42 @@ async function ensureIntakeActivity(
   return await ctx.db.get(activityId)
 }
 
+async function ensurePillarsActivity(
+  ctx: MutationCtx,
+  sessionId: Id<'sessions'>,
+) {
+  const existing = await ctx.db
+    .query('activities')
+    .withIndex('by_sessionId_and_type', (q) =>
+      q.eq('sessionId', sessionId).eq('type', 'pillars'),
+    )
+    .first()
+  if (existing) {
+    return existing
+  }
+  const activityId = await ctx.db.insert('activities', {
+    sessionId,
+    type: 'pillars',
+    title: 'Pillars of Support: School Uniforms',
+    status: 'closed',
+    config: PILLARS_CONFIG,
+    createdAt: Date.now(),
+  })
+  return await ctx.db.get(activityId)
+}
+
+async function getPillarsActivity(
+  ctx: QueryCtx | MutationCtx,
+  sessionId: Id<'sessions'>,
+) {
+  return await ctx.db
+    .query('activities')
+    .withIndex('by_sessionId_and_type', (q) =>
+      q.eq('sessionId', sessionId).eq('type', 'pillars'),
+    )
+    .first()
+}
+
 function displayNameFromParticipant(
   participant: Doc<'sessionParticipants'> | null,
   identity: UserIdentity,
@@ -375,6 +411,20 @@ export const getTeacherSession = query({
   },
 })
 
+export const getTeacherPillarsActivity = query({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
+    await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    return await getPillarsActivity(ctx, args.sessionId)
+  },
+})
+
 export const joinSessionByCode = mutation({
   args: { code: v.string(), displayName: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -445,12 +495,7 @@ export const getStudentSession = query({
       args.sessionId,
       identity.tokenIdentifier,
     )
-    const activity = await ctx.db
-      .query('activities')
-      .withIndex('by_sessionId_and_type', (q) =>
-        q.eq('sessionId', args.sessionId).eq('type', 'pillars'),
-      )
-      .first()
+    const activity = await getPillarsActivity(ctx, args.sessionId)
     return { session: access.session, role: access.role, activity }
   },
 })
@@ -522,12 +567,7 @@ export const listActivitySubmissions = query({
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
     await assertCanAccessSession(ctx, args.sessionId, identity.tokenIdentifier)
-    const activity = await ctx.db
-      .query('activities')
-      .withIndex('by_sessionId_and_type', (q) =>
-        q.eq('sessionId', args.sessionId).eq('type', 'pillars'),
-      )
-      .first()
+    const activity = await getPillarsActivity(ctx, args.sessionId)
     if (!activity) {
       return []
     }
@@ -578,12 +618,7 @@ export const getMyPillarsSubmission = query({
     if (access.role !== 'student') {
       throw new Error('Only students can view their submission')
     }
-    const activity = await ctx.db
-      .query('activities')
-      .withIndex('by_sessionId_and_type', (q) =>
-        q.eq('sessionId', args.sessionId).eq('type', 'pillars'),
-      )
-      .first()
+    const activity = await getPillarsActivity(ctx, args.sessionId)
     if (!activity) {
       return null
     }
@@ -704,6 +739,17 @@ export const submitPillarsExercise = mutation({
       throw new Error('Only students can submit assessments')
     }
     assertSessionIsActive(access.session)
+    const activity = await ctx.db.get(args.activityId)
+    if (
+      !activity ||
+      activity.sessionId !== args.sessionId ||
+      activity.type !== 'pillars'
+    ) {
+      throw new Error('Pillars activity not found')
+    }
+    if (activity.status !== 'open') {
+      throw new Error('Pillars exercise has not started')
+    }
     validatePillarsPayload(args.payload)
     const existing = await ctx.db
       .query('activitySubmissions')
@@ -734,6 +780,65 @@ export const submitPillarsExercise = mutation({
       submittedAt: now,
       updatedAt: now,
     })
+  },
+})
+
+export const beginPillarsExercise = mutation({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
+    const session = await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    if (session.status === 'ended') {
+      throw new Error('Ended classes cannot be changed')
+    }
+    if (session.status !== 'active') {
+      throw new Error('Start class before beginning Pillars')
+    }
+    const activity = await ensurePillarsActivity(ctx, args.sessionId)
+    if (!activity) {
+      throw new Error('Pillars activity not found')
+    }
+    if (activity.status === 'open') {
+      return null
+    }
+    await ctx.db.patch(activity._id, { status: 'open' })
+    return null
+  },
+})
+
+export const setPillarsActivityReleased = mutation({
+  args: {
+    sessionId: v.id('sessions'),
+    released: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
+    const session = await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    if (session.status === 'ended') {
+      throw new Error('Ended classes cannot be changed')
+    }
+    if (session.status !== 'active') {
+      throw new Error('Start class before beginning Pillars')
+    }
+    const activity = await ensurePillarsActivity(ctx, args.sessionId)
+    if (!activity) {
+      throw new Error('Pillars activity not found')
+    }
+    const status = args.released === false ? 'closed' : 'open'
+    if (activity.status !== status) {
+      await ctx.db.patch(activity._id, { status })
+    }
+    return null
   },
 })
 
@@ -801,15 +906,17 @@ export const startSession = mutation({
       status: 'active',
       startedAt: session.startedAt || now,
     })
-    const activities = await ctx.db
-      .query('activities')
-      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
-      .collect()
-    await Promise.all(
-      activities.map((activity) =>
-        ctx.db.patch(activity._id, { status: 'open' }),
-      ),
-    )
+    const intakeActivity = await ensureIntakeActivity(ctx, args.sessionId)
+    if (!intakeActivity) {
+      throw new Error('Intake form unavailable')
+    }
+    if (intakeActivity.status !== 'open') {
+      await ctx.db.patch(intakeActivity._id, { status: 'open' })
+    }
+    const pillarsActivity = await ensurePillarsActivity(ctx, args.sessionId)
+    if (pillarsActivity?.status === 'open') {
+      await ctx.db.patch(pillarsActivity._id, { status: 'closed' })
+    }
     return null
   },
 })
@@ -832,15 +939,10 @@ export const stopSession = mutation({
     }
     const now = Date.now()
     await ctx.db.patch(args.sessionId, { status: 'stopped', stoppedAt: now })
-    const activities = await ctx.db
-      .query('activities')
-      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
-      .collect()
-    await Promise.all(
-      activities.map((activity) =>
-        ctx.db.patch(activity._id, { status: 'closed' }),
-      ),
-    )
+    const pillarsActivity = await getPillarsActivity(ctx, args.sessionId)
+    if (pillarsActivity?.status === 'open') {
+      await ctx.db.patch(pillarsActivity._id, { status: 'closed' })
+    }
     return null
   },
 })

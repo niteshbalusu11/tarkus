@@ -43,6 +43,56 @@ async function onboard(
   })
 }
 
+function validPillarsPayload() {
+  return {
+    version: 2,
+    exercise: 'school-uniform-pillars',
+    scenario: 'School uniform policy',
+    powerHolder: 'School board',
+    pillars: [
+      {
+        id: 'principal',
+        name: 'Principal',
+        accessibility: 3,
+        role: 'Can influence the board.',
+      },
+      {
+        id: 'parents',
+        name: 'Parents association',
+        accessibility: 4,
+        role: 'Can pressure administrators.',
+      },
+      {
+        id: 'teachers',
+        name: 'Teachers',
+        accessibility: 5,
+        role: 'Enforce the policy daily.',
+      },
+    ],
+    moves: [
+      {
+        rank: 1,
+        pillarId: 'teachers',
+        pillarName: 'Teachers',
+        why: 'They are easy to reach and enforce the rule.',
+      },
+      {
+        rank: 2,
+        pillarId: 'parents',
+        pillarName: 'Parents association',
+        why: 'They can widen support.',
+      },
+      {
+        rank: 3,
+        pillarId: 'principal',
+        pillarName: 'Principal',
+        why: 'Approach with broader backing.',
+      },
+    ],
+    reflection: 'Start with the principal before escalating.',
+  }
+}
+
 describe('sessions auth and participant identity', () => {
   it('requires authentication before creating or joining a session', async () => {
     const t = newTestBackend()
@@ -255,8 +305,100 @@ describe('sessions auth and participant identity', () => {
       otherTeacher.mutation(api.sessions.stopSession, { sessionId }),
     ).rejects.toThrow('Unauthorized')
     await expect(
+      otherTeacher.mutation(api.sessions.beginPillarsExercise, { sessionId }),
+    ).rejects.toThrow('Unauthorized')
+    await expect(
       otherTeacher.mutation(api.sessions.endSession, { sessionId }),
     ).rejects.toThrow('Unauthorized')
+  })
+
+  it('keeps Pillars locked until the owning teacher begins the exercise', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Trainer')
+    await onboard(t, studentIdentity, 'student', 'Maya')
+    const { sessionId, activityId, code } = await teacher.mutation(
+      api.sessions.createSession,
+      {},
+    )
+
+    await student.mutation(api.sessions.joinSessionByCode, {
+      code,
+      displayName: 'Maya',
+    })
+
+    const initial = await student.query(api.sessions.getStudentSession, {
+      sessionId,
+    })
+    expect(initial.activity?.status).toBe('closed')
+    await expect(
+      teacher.mutation(api.sessions.beginPillarsExercise, { sessionId }),
+    ).rejects.toThrow('Start class before beginning Pillars')
+
+    await teacher.mutation(api.sessions.startSession, { sessionId })
+    const afterStart = await student.query(api.sessions.getStudentSession, {
+      sessionId,
+    })
+    expect(afterStart.activity?.status).toBe('closed')
+    await expect(
+      student.mutation(api.sessions.submitPillarsExercise, {
+        sessionId,
+        activityId,
+        payload: validPillarsPayload(),
+      }),
+    ).rejects.toThrow('Pillars exercise has not started')
+
+    await teacher.mutation(api.sessions.beginPillarsExercise, { sessionId })
+    const afterBegin = await student.query(api.sessions.getStudentSession, {
+      sessionId,
+    })
+    expect(afterBegin.activity?.status).toBe('open')
+    await student.mutation(api.sessions.submitPillarsExercise, {
+      sessionId,
+      activityId,
+      payload: validPillarsPayload(),
+    })
+
+    await teacher.mutation(api.sessions.stopSession, { sessionId })
+    await teacher.mutation(api.sessions.startSession, { sessionId })
+    const afterRestart = await student.query(api.sessions.getStudentSession, {
+      sessionId,
+    })
+    expect(afterRestart.activity?.status).toBe('closed')
+    await expect(
+      student.mutation(api.sessions.submitPillarsExercise, {
+        sessionId,
+        activityId,
+        payload: validPillarsPayload(),
+      }),
+    ).rejects.toThrow('Pillars exercise has not started')
+  })
+
+  it('keeps the old Pillars release mutation compatible with the new gate', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Trainer')
+    await onboard(t, studentIdentity, 'student', 'Maya')
+    const { sessionId, code } = await teacher.mutation(
+      api.sessions.createSession,
+      {},
+    )
+
+    await student.mutation(api.sessions.joinSessionByCode, {
+      code,
+      displayName: 'Maya',
+    })
+    await teacher.mutation(api.sessions.startSession, { sessionId })
+    await teacher.mutation(api.sessions.setPillarsActivityReleased, {
+      sessionId,
+    })
+
+    const afterRelease = await student.query(api.sessions.getStudentSession, {
+      sessionId,
+    })
+    expect(afterRelease.activity?.status).toBe('open')
   })
 
   it('uses the participant display name for chat and Pillars submissions', async () => {
@@ -275,6 +417,7 @@ describe('sessions auth and participant identity', () => {
       displayName: 'Maya',
     })
     await teacher.mutation(api.sessions.startSession, { sessionId })
+    await teacher.mutation(api.sessions.beginPillarsExercise, { sessionId })
     await student.mutation(api.sessions.sendMessage, {
       sessionId,
       body: 'I am unsure who can actually change the uniform policy.',
@@ -471,6 +614,7 @@ describe('sessions auth and participant identity', () => {
       displayName: 'Maya',
     })
     await teacher.mutation(api.sessions.startSession, { sessionId })
+    await teacher.mutation(api.sessions.beginPillarsExercise, { sessionId })
 
     await expect(
       student.mutation(api.sessions.submitPillarsExercise, {

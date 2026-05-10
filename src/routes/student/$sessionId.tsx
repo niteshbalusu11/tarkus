@@ -246,13 +246,14 @@ function getStudentStatusMeta(status: SessionStatus) {
         icon: Clock,
         title: 'Waiting for teacher to start class',
         description:
-          'You are in the room. Chat and the exercise will unlock when class starts.',
+          'You are in the room. Chat opens when class starts; Pillars opens when your teacher begins it.',
       }
     case 'active':
       return {
         icon: CheckCircle2,
         title: 'Class is live',
-        description: 'Chat and the Pillars exercise are open.',
+        description:
+          'Chat is open. Your teacher will unlock Pillars when the room is ready.',
       }
     case 'stopped':
       return {
@@ -336,6 +337,7 @@ function StudentSession() {
 
   const activity = sessionData?.activity
   const isClassActive = sessionData?.session.status === 'active'
+  const isPillarsOpen = isClassActive && activity?.status === 'open'
   const canUseIntake = Boolean(
     sessionData?.session.status &&
     sessionData.session.status !== 'ended' &&
@@ -353,7 +355,7 @@ function StudentSession() {
   )
   const canSubmit = Boolean(
     isClassActive &&
-    activity &&
+    isPillarsOpen &&
     powerHolder.trim() &&
     pillars.length >= 3 &&
     firstMoves.every((pillar) => moveReasons[pillar.id]?.trim()) &&
@@ -457,7 +459,8 @@ function StudentSession() {
   }
 
   async function handleSubmit() {
-    if (!isClassActive || !activity || !canSubmit) return
+    if (!isClassActive || !canSubmit) return
+    if (activity?.status !== 'open') return
     setError(null)
     const payload: PillarsPayloadV2 = {
       version: 2,
@@ -662,38 +665,67 @@ function StudentSession() {
               isMinimized={isIntakeMinimized}
               setIsMinimized={setIsIntakeMinimized}
             />
-            <PillarsActivityWidget
-              missionSteps={missionSteps}
-              activeMission={activeMission}
-              setActiveMission={setActiveMission}
-              scenario={scenario}
-              powerHolder={powerHolder}
-              setPowerHolder={setPowerHolder}
-              pillarName={pillarName}
-              setPillarName={setPillarName}
-              pillars={pillars}
-              moveReasons={moveReasons}
-              setMoveReasons={setMoveReasons}
-              updatePillar={updatePillar}
-              removePillar={removePillar}
-              addPillar={addPillar}
-              handleDragEnd={handleDragEnd}
-              sensors={sensors}
-              isClassActive={isClassActive}
-              reflection={reflection}
-              setReflection={setReflection}
-              error={error}
-              submitted={submitted}
-              canSubmit={canSubmit}
-              handleSubmit={handleSubmit}
-              isMinimized={isPillarsMinimized}
-              setIsMinimized={setIsPillarsMinimized}
-            />
+            {isPillarsOpen ? (
+              <PillarsActivityWidget
+                missionSteps={missionSteps}
+                activeMission={activeMission}
+                setActiveMission={setActiveMission}
+                scenario={scenario}
+                powerHolder={powerHolder}
+                setPowerHolder={setPowerHolder}
+                pillarName={pillarName}
+                setPillarName={setPillarName}
+                pillars={pillars}
+                moveReasons={moveReasons}
+                setMoveReasons={setMoveReasons}
+                updatePillar={updatePillar}
+                removePillar={removePillar}
+                addPillar={addPillar}
+                handleDragEnd={handleDragEnd}
+                sensors={sensors}
+                isClassActive={isClassActive}
+                reflection={reflection}
+                setReflection={setReflection}
+                error={error}
+                submitted={submitted}
+                canSubmit={canSubmit}
+                handleSubmit={handleSubmit}
+                isMinimized={isPillarsMinimized}
+                setIsMinimized={setIsPillarsMinimized}
+              />
+            ) : (
+              <PillarsLockedWidget isClassActive={isClassActive} />
+            )}
             <StudentSlidesCard presentation={publishedPresentation} />
           </aside>
         </div>
       </section>
     </main>
+  )
+}
+
+function PillarsLockedWidget({ isClassActive }: { isClassActive: boolean }) {
+  return (
+    <section className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.92)] p-4 shadow-[0_18px_60px_rgba(28,28,28,0.06)]">
+      <div className="flex items-start gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--paper-warm)] text-[var(--amber-deep)]">
+          <Lock className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
+            Pillars widget
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-foreground">
+            Pillars locked
+          </h2>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">
+            {isClassActive
+              ? 'Your teacher will open this exercise when the room is ready.'
+              : 'This exercise opens after class starts and your teacher begins it.'}
+          </p>
+        </div>
+      </div>
+    </section>
   )
 }
 

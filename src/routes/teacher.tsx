@@ -92,6 +92,7 @@ function TeacherDashboard() {
   const stopSession = useMutation(api.sessions.stopSession)
   const endSession = useMutation(api.sessions.endSession)
   const deleteSession = useMutation(api.sessions.deleteSession)
+  const beginPillarsExercise = useMutation(api.sessions.beginPillarsExercise)
   const seedDemo = useMutation(api.sessions.seedDemoSession)
   const analyzeSession = useAction(api.sessions.analyzeSession)
   const [selectedSessionId, setSelectedSessionId] =
@@ -130,6 +131,10 @@ function TeacherDashboard() {
   )
   const intakeSubmissions = useQuery(
     api.sessions.listIntakeSubmissions,
+    activeSessionId ? { sessionId: activeSessionId } : 'skip',
+  )
+  const pillarsActivity = useQuery(
+    api.sessions.getTeacherPillarsActivity,
     activeSessionId ? { sessionId: activeSessionId } : 'skip',
   )
   const latestAnalysis = useQuery(
@@ -192,6 +197,16 @@ function TeacherDashboard() {
     setBusyAction('stop')
     try {
       await stopSession({ sessionId: activeSessionId })
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  async function handleBeginPillars() {
+    if (!activeSessionId) return
+    setBusyAction('begin-pillars')
+    try {
+      await beginPillarsExercise({ sessionId: activeSessionId })
     } finally {
       setBusyAction(null)
     }
@@ -294,9 +309,11 @@ function TeacherDashboard() {
               expiresAt={session.expiresAt}
               participantCount={participants?.length || 0}
               submissionCount={submissions?.length || 0}
+              pillarsStatus={pillarsActivity?.status}
               busyAction={busyAction}
               onStart={handleStart}
               onStop={handleStop}
+              onBeginPillars={handleBeginPillars}
               onRequestEnd={() => setEndDialogOpen(true)}
               onSeed={handleSeedAndAnalyze}
               onDelete={handleDelete}
@@ -513,9 +530,11 @@ function SessionHeader({
   expiresAt,
   participantCount,
   submissionCount,
+  pillarsStatus,
   busyAction,
   onStart,
   onStop,
+  onBeginPillars,
   onRequestEnd,
   onSeed,
   onDelete,
@@ -528,9 +547,11 @@ function SessionHeader({
   expiresAt: number
   participantCount: number
   submissionCount: number
+  pillarsStatus?: Doc<'activities'>['status']
   busyAction: string | null
   onStart: () => void
   onStop: () => void
+  onBeginPillars: () => void
   onRequestEnd: () => void
   onSeed: () => void
   onDelete: () => void
@@ -545,6 +566,8 @@ function SessionHeader({
   const canStart = status === 'not_started' || status === 'stopped'
   const canStop = status === 'active'
   const canEnd = status !== 'ended'
+  const isPillarsLive = status === 'active' && pillarsStatus === 'open'
+  const canBeginPillars = status === 'active' && !isPillarsLive
 
   return (
     <section className="overflow-hidden rounded-3xl border border-[var(--line)] bg-[#fffdf8] shadow-[0_20px_60px_rgba(28,28,28,0.06)]">
@@ -632,6 +655,21 @@ function SessionHeader({
               >
                 <Pause className="h-4 w-4" />
                 Stop
+              </Button>
+            ) : null}
+            {isPillarsLive ? (
+              <Badge className="h-10 gap-1.5 rounded-md bg-[var(--charcoal)] px-3 text-white">
+                <Flag className="h-4 w-4" />
+                Pillars live
+              </Badge>
+            ) : status !== 'ended' ? (
+              <Button
+                variant="outline"
+                disabled={!canBeginPillars || busyAction === 'begin-pillars'}
+                onClick={onBeginPillars}
+              >
+                <Flag className="h-4 w-4" />
+                Begin Pillars
               </Button>
             ) : null}
             {canEnd ? (
