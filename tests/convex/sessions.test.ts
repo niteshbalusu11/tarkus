@@ -423,6 +423,10 @@ describe('sessions auth and participant identity', () => {
       api.sessions.listActivitySubmissions,
       { sessionId },
     )
+    const intakeSubmissions = await teacher.query(
+      api.sessions.listIntakeSubmissions,
+      { sessionId },
+    )
 
     expect(ownIntake).toMatchObject({
       displayName: 'Maya',
@@ -432,7 +436,20 @@ describe('sessions auth and participant identity', () => {
         peoplePower: 5,
       },
     })
+    expect(intakeSubmissions).toMatchObject([
+      {
+        displayName: 'Maya',
+        type: 'intake',
+        payload: {
+          country: 'United States',
+          peoplePower: 5,
+        },
+      },
+    ])
     expect(pillarsSubmissions).toEqual([])
+    await expect(
+      student.query(api.sessions.listIntakeSubmissions, { sessionId }),
+    ).rejects.toThrow('Only teachers can use this')
     await expect(
       teacher.query(api.sessions.getMyIntakeSubmission, { sessionId }),
     ).rejects.toThrow('Only students can view their intake')

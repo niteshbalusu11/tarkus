@@ -24,6 +24,7 @@ import {
   RefreshCw,
   Square,
   Sparkles,
+  TrendingUp,
   Trash2,
   Users,
 } from 'lucide-react'
@@ -64,6 +65,14 @@ export const Route = createFileRoute('/teacher')({
 })
 
 type TeacherSession = Doc<'sessions'>
+type IntakePayload = {
+  ageRange?: string
+  country?: string
+  priorTraining?: string
+  violenceEffective?: number
+  weaponsMoneyPower?: number
+  peoplePower?: number
+}
 
 function TeacherRoute() {
   const location = useLocation()
@@ -117,6 +126,10 @@ function TeacherDashboard() {
   )
   const submissions = useQuery(
     api.sessions.listActivitySubmissions,
+    activeSessionId ? { sessionId: activeSessionId } : 'skip',
+  )
+  const intakeSubmissions = useQuery(
+    api.sessions.listIntakeSubmissions,
     activeSessionId ? { sessionId: activeSessionId } : 'skip',
   )
   const latestAnalysis = useQuery(
@@ -309,6 +322,7 @@ function TeacherDashboard() {
                   onOpenInsights={() => setAiInsightsOpen(true)}
                   onRefresh={handleAnalyze}
                 />
+                <IntakeSummaryWidget submissions={intakeSubmissions || []} />
                 <PillarsPanel submissions={submissions || []} />
               </div>
               <LiveSidePanel
@@ -1059,6 +1073,146 @@ function BulletList({ items }: { items: Array<string> }) {
       ))}
     </ul>
   )
+}
+
+function IntakeSummaryWidget({
+  submissions,
+}: {
+  submissions: Array<ActivitySubmission>
+}) {
+  const summary = useMemo(() => summarizeIntake(submissions), [submissions])
+
+  return (
+    <Card className="h-fit border-[var(--line)] bg-[#fffdf8]">
+      <CardHeader className="flex flex-row items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber)]">
+            Intake
+          </p>
+          <CardTitle className="mt-1 font-serif text-2xl">
+            Room baseline
+          </CardTitle>
+        </div>
+        <Badge variant="secondary">{submissions.length} responses</Badge>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 md:grid-cols-4">
+          <IntakeMetric
+            label="Violence belief"
+            value={summary.violenceAverage}
+          />
+          <IntakeMetric label="Weapons view" value={summary.powerAverage} />
+          <IntakeMetric
+            label="People power"
+            value={summary.peoplePowerAverage}
+          />
+          <IntakeMetric label="First timers" value={summary.firstTimers} />
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <IntakeList title="Countries" items={summary.countries} />
+          <IntakeList title="Age bands" items={summary.ageRanges} />
+          <IntakeList title="Training" items={summary.training} />
+        </div>
+
+        {!submissions.length ? (
+          <p className="mt-4 rounded-xl border border-dashed border-[var(--line-strong)] bg-muted/30 p-4 text-sm text-muted-foreground">
+            Waiting for students to submit intake forms.
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+}
+
+function IntakeMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--line)] bg-muted/40 p-3">
+      <div className="flex items-center gap-2">
+        <TrendingUp className="h-4 w-4 text-[var(--amber-deep)]" />
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </p>
+      </div>
+      <p className="mt-2 font-serif text-2xl font-semibold text-foreground">
+        {value}
+      </p>
+    </div>
+  )
+}
+
+function IntakeList({
+  title,
+  items,
+}: {
+  title: string
+  items: Array<{ label: string; count: number }>
+}) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <div className="mt-3 space-y-2">
+        {items.length ? (
+          items.slice(0, 4).map((item) => (
+            <div key={item.label} className="flex items-center gap-3">
+              <span className="flex-1 truncate text-sm text-foreground">
+                {item.label}
+              </span>
+              <span className="text-sm font-semibold text-foreground">
+                {item.count}
+              </span>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">No data yet.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function summarizeIntake(submissions: Array<ActivitySubmission>) {
+  const payloads = submissions.map(
+    (submission) => submission.payload as IntakePayload,
+  )
+  const average = (key: keyof IntakePayload) => {
+    const values = payloads
+      .map((payload) => payload[key])
+      .filter((value): value is number => typeof value === 'number')
+    if (!values.length) return '-'
+    return (
+      values.reduce((sum, value) => sum + value, 0) / values.length
+    ).toFixed(1)
+  }
+
+  return {
+    violenceAverage: average('violenceEffective'),
+    powerAverage: average('weaponsMoneyPower'),
+    peoplePowerAverage: average('peoplePower'),
+    firstTimers: String(
+      payloads.filter(
+        (payload) => payload.priorTraining === 'No, this is my first time',
+      ).length,
+    ),
+    countries: countLabels(payloads.map((payload) => payload.country)),
+    ageRanges: countLabels(payloads.map((payload) => payload.ageRange)),
+    training: countLabels(payloads.map((payload) => payload.priorTraining)),
+  }
+}
+
+function countLabels(values: Array<string | undefined>) {
+  const counts = new Map<string, number>()
+  for (const value of values) {
+    const label = value?.trim()
+    if (!label) continue
+    counts.set(label, (counts.get(label) || 0) + 1)
+  }
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort(
+      (left, right) =>
+        right.count - left.count || left.label.localeCompare(right.label),
+    )
 }
 
 function PillarsPanel({

@@ -539,6 +539,33 @@ export const listActivitySubmissions = query({
   },
 })
 
+export const listIntakeSubmissions = query({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
+    await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    const activity = await ctx.db
+      .query('activities')
+      .withIndex('by_sessionId_and_type', (q) =>
+        q.eq('sessionId', args.sessionId).eq('type', 'intake'),
+      )
+      .first()
+    if (!activity) {
+      return []
+    }
+    return await ctx.db
+      .query('activitySubmissions')
+      .withIndex('by_activityId', (q) => q.eq('activityId', activity._id))
+      .order('asc')
+      .take(100)
+  },
+})
+
 export const getMyPillarsSubmission = query({
   args: { sessionId: v.id('sessions') },
   handler: async (ctx, args) => {
