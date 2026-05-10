@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import {
   ArrowLeft,
@@ -80,6 +80,7 @@ function PrepWorkspaceRoute() {
 function PrepWorkspace() {
   const { sessionId } = Route.useParams()
   const typedSessionId = sessionId as Id<'sessions'>
+  const navigate = useNavigate()
   const prepForSession = useQuery(api.prep.getWorkspaceForSession, {
     sessionId: typedSessionId,
   })
@@ -286,15 +287,18 @@ function PrepWorkspace() {
               <StatusTile label="Images" value={`${imageCount}`} />
             </div>
             <Button
-              asChild
               variant="outline"
               className="h-11 w-full rounded-xl bg-[#fffefa]"
+              onClick={() =>
+                void navigate({
+                  to: '/teacher',
+                  search: { sessionId: typedSessionId },
+                })
+              }
             >
-              <a href={`/teacher?sessionId=${typedSessionId}`}>
-                <ArrowLeft className="h-4 w-4" />
-                <Monitor className="h-4 w-4" />
-                Live dashboard
-              </a>
+              <ArrowLeft className="h-4 w-4" />
+              <Monitor className="h-4 w-4" />
+              Live dashboard
             </Button>
           </div>
         </div>
