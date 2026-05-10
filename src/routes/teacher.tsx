@@ -18,6 +18,7 @@ import {
   LayoutDashboard,
   MessageSquareText,
   Pause,
+  PanelRightOpen,
   Play,
   RefreshCw,
   Square,
@@ -87,6 +88,7 @@ function TeacherDashboard() {
     useState<Id<'sessions'> | null>(null)
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [endDialogOpen, setEndDialogOpen] = useState(false)
+  const [aiInsightsOpen, setAiInsightsOpen] = useState(false)
 
   const sessionIdFromUrl =
     typeof window === 'undefined'
@@ -134,6 +136,7 @@ function TeacherDashboard() {
   async function handleSeedAndAnalyze() {
     if (!activeSessionId) return
     setBusyAction('seed')
+    setAiInsightsOpen(true)
     try {
       await seedDemo({ sessionId: activeSessionId })
       await analyzeSession({ sessionId: activeSessionId })
@@ -190,6 +193,7 @@ function TeacherDashboard() {
   async function handleAnalyze() {
     if (!activeSessionId) return
     setBusyAction('analyze')
+    setAiInsightsOpen(true)
     try {
       await analyzeSession({ sessionId: activeSessionId })
     } finally {
@@ -222,24 +226,24 @@ function TeacherDashboard() {
             onCreate={handleCreateSession}
           />
           <Card className="flex min-h-[58vh] flex-col items-center justify-center border-dashed px-6 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <LayoutDashboard className="h-6 w-6" />
-          </div>
-          <h1 className="mt-6 font-serif text-3xl font-semibold tracking-tight text-foreground">
-            Create a class
-          </h1>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-            One class holds both prep and live mode. Build the curriculum first,
-            then start the room when students are ready to join.
-          </p>
-          <Button
-            className="mt-7"
-            disabled={busyAction === 'create'}
-            onClick={handleCreateSession}
-          >
-            <Play className="h-4 w-4" />
-            New class
-          </Button>
+            <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <LayoutDashboard className="h-6 w-6" />
+            </div>
+            <h1 className="mt-6 font-serif text-3xl font-semibold tracking-tight text-foreground">
+              Create a class
+            </h1>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
+              One class holds both prep and live mode. Build the curriculum
+              first, then start the room when students are ready to join.
+            </p>
+            <Button
+              className="mt-7"
+              disabled={busyAction === 'create'}
+              onClick={handleCreateSession}
+            >
+              <Play className="h-4 w-4" />
+              New class
+            </Button>
           </Card>
         </section>
       </main>
@@ -276,20 +280,24 @@ function TeacherDashboard() {
               onStart={handleStart}
               onStop={handleStop}
               onRequestEnd={() => setEndDialogOpen(true)}
-              onAnalyze={handleAnalyze}
               onSeed={handleSeedAndAnalyze}
               onDelete={handleDelete}
               onPrep={handlePrepClass}
             />
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-5">
-                <AiPanel
+                <AiSummaryBar
                   analysis={analysis}
                   error={latestAnalysis?.error}
                   analyzedSubmissionCount={
                     latestAnalysis?.inputCursor.submissionCount
                   }
                   currentSubmissionCount={submissions?.length || 0}
+                  isRefreshing={
+                    busyAction === 'analyze' || busyAction === 'seed'
+                  }
+                  onOpenInsights={() => setAiInsightsOpen(true)}
+                  onRefresh={handleAnalyze}
                 />
                 <PillarsPanel submissions={submissions || []} />
               </div>
@@ -301,6 +309,16 @@ function TeacherDashboard() {
           </div>
         </div>
       </section>
+      <AiInsightsDrawer
+        analysis={analysis}
+        error={latestAnalysis?.error}
+        analyzedSubmissionCount={latestAnalysis?.inputCursor.submissionCount}
+        currentSubmissionCount={submissions?.length || 0}
+        isOpen={aiInsightsOpen}
+        isRefreshing={busyAction === 'analyze' || busyAction === 'seed'}
+        onOpenChange={setAiInsightsOpen}
+        onRefresh={handleAnalyze}
+      />
       <Dialog open={endDialogOpen} onOpenChange={setEndDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -428,10 +446,8 @@ function SessionPicker({
   return (
     <aside className="sticky top-24 h-fit rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.72)] p-3">
       <div className="mb-3 flex items-center gap-2 px-1">
-          <LayoutDashboard className="h-4 w-4 text-[var(--amber-deep)]" />
-        <h2 className="text-sm font-bold text-[var(--charcoal)]">
-          Class list
-        </h2>
+        <LayoutDashboard className="h-4 w-4 text-[var(--amber-deep)]" />
+        <h2 className="text-sm font-bold text-[var(--charcoal)]">Class list</h2>
       </div>
       <div className="space-y-2">
         {sessions.map((session) => {
@@ -477,7 +493,6 @@ function SessionHeader({
   onStart,
   onStop,
   onRequestEnd,
-  onAnalyze,
   onSeed,
   onDelete,
   onPrep,
@@ -492,7 +507,6 @@ function SessionHeader({
   onStart: () => void
   onStop: () => void
   onRequestEnd: () => void
-  onAnalyze: () => void
   onSeed: () => void
   onDelete: () => void
   onPrep: () => void
@@ -527,23 +541,23 @@ function SessionHeader({
             <div className="mt-5 rounded-2xl bg-[var(--charcoal)] p-4 text-white">
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-pale)]">
-                  Join code
-                </p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-pale)]">
+                    Join code
+                  </p>
                   <p className="font-mono text-4xl font-semibold tracking-[0.18em] text-white">
-                  {code}
-                </p>
-              </div>
-              <Button
+                    {code}
+                  </p>
+                </div>
+                <Button
                   className="mb-1 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white"
-                size="icon"
-                variant="outline"
-                title="Copy join code"
-                onClick={() => navigator.clipboard.writeText(code)}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
+                  size="icon"
+                  variant="outline"
+                  title="Copy join code"
+                  onClick={() => navigator.clipboard.writeText(code)}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               {statusMeta.description} Use prep for curriculum and slides, then
@@ -604,10 +618,6 @@ function SessionHeader({
               <Sparkles className="h-4 w-4" />
               Seed demo
             </Button>
-            <Button disabled={busyAction === 'analyze'} onClick={onAnalyze}>
-              <RefreshCw className="h-4 w-4" />
-              Refresh AI
-            </Button>
             <Button variant="destructive" size="icon" onClick={onDelete}>
               <Trash2 className="h-4 w-4" />
             </Button>
@@ -636,222 +646,398 @@ function Stat({
   )
 }
 
-function AiPanel({
+function AiSummaryBar({
   analysis,
   error,
   analyzedSubmissionCount,
   currentSubmissionCount,
+  isRefreshing,
+  onOpenInsights,
+  onRefresh,
 }: {
   analysis?: NormalizedAnalysisOutput
   error?: string
   analyzedSubmissionCount?: number
   currentSubmissionCount: number
+  isRefreshing: boolean
+  onOpenInsights: () => void
+  onRefresh: () => void
 }) {
   const isStale =
     analysis &&
     analyzedSubmissionCount !== undefined &&
     currentSubmissionCount > analyzedSubmissionCount
+  const readiness = analysis?.readiness
+  const topSignal =
+    analysis?.collectiveBlindSpot ||
+    analysis?.unclearConcepts[0] ||
+    analysis?.teacherBrief[0] ||
+    'Refresh AI when students submit maps to generate a teacher-only synthesis.'
+  const debriefPrompt =
+    analysis?.trainerDebriefPrompt ||
+    'The next debrief prompt will appear after AI reads student maps.'
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-[#151927] bg-[#080b16] text-white shadow-[0_24px_70px_rgba(4,7,18,0.22)]">
-      <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-teal-200 text-slate-950">
-            <Bot className="h-5 w-5" />
+    <section className="rounded-2xl border border-[#151927] bg-[#080b16] p-4 text-white shadow-[0_24px_70px_rgba(4,7,18,0.22)]">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex min-w-0 gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-200 text-slate-950">
+            {isRefreshing ? (
+              <RefreshCw className="h-5 w-5 animate-spin" />
+            ) : (
+              <Bot className="h-5 w-5" />
+            )}
           </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-200">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-200">
               Teacher-only AI
             </p>
-            <h2 className="font-serif text-2xl leading-tight text-white">
-              Class synthesis
+            <h2 className="mt-1 truncate font-serif text-2xl leading-tight text-white">
+              {readiness
+                ? `${readiness.readyCount}/${readiness.totalCount} ready · ${readiness.recommendation.replaceAll('_', ' ')}`
+                : 'No synthesis yet'}
             </h2>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge className="border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.06]">
             {currentSubmissionCount} submissions
-          </span>
+          </Badge>
           {analyzedSubmissionCount !== undefined ? (
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+            <Badge className="border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.06]">
               AI read {analyzedSubmissionCount}
-            </span>
+            </Badge>
+          ) : null}
+          {error ? (
+            <Badge
+              variant="outline"
+              className="border-amber-200/30 bg-amber-200/10 text-amber-100"
+            >
+              Fallback
+            </Badge>
           ) : null}
         </div>
       </div>
-      <div className="p-5">
-        {error ? (
-          <Alert className="mb-4 border-amber-300/20 bg-amber-300/10 text-amber-100">
-            <AlertDescription>
-              Using local fallback analysis: {error}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {isStale ? (
-          <Alert className="mb-4 border-amber-300/20 bg-amber-300/10 text-amber-100">
-            <AlertDescription>
-              AI was last refreshed at {analyzedSubmissionCount} submissions.
-              Refresh AI to include the newest maps.
-            </AlertDescription>
-          </Alert>
-        ) : null}
 
-        {!analysis ? (
-          <div className="grid min-h-40 place-items-center rounded-2xl border border-dashed border-white/15 bg-white/[0.035] p-6 text-center">
-            <div>
-              <p className="font-serif text-2xl text-white">
-                Waiting for class signal.
-              </p>
-              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">
-                Seed demo data or wait for student activity, then refresh AI for
-                a concise class brief.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid gap-5 xl:grid-cols-[270px_minmax(0,1fr)]">
-            <aside className="space-y-4">
-              {analysis.readiness ? (
-                <div className="rounded-2xl border border-teal-200/20 bg-teal-200/[0.08] p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-200">
-                    Readiness
-                  </p>
-                  <p className="mt-3 font-serif text-5xl font-semibold text-white">
-                    {analysis.readiness.readyCount}/
-                    {analysis.readiness.totalCount}
-                  </p>
-                  <Badge className="mt-3 bg-teal-200 text-slate-950 hover:bg-teal-200">
-                    {analysis.readiness.recommendation.replaceAll('_', ' ')}
-                  </Badge>
-                </div>
-              ) : null}
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Emotional tone
-                </p>
-                <p className="mt-2 text-lg font-semibold text-white">
-                  {analysis.emotionalTone.label || 'No signal yet'}
-                </p>
-                <p className="mt-1 text-sm leading-6 text-slate-300">
-                  {analysis.emotionalTone.explanation ||
-                    'More class activity is needed.'}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Chat clusters
-                </p>
-                <div className="mt-3 space-y-2">
-                  {analysis.chatClusters.length ? (
-                    analysis.chatClusters.map((cluster) => (
-                      <div
-                        key={cluster.label}
-                        className="flex items-center justify-between gap-3 text-sm"
-                      >
-                        <span className="text-slate-200">{cluster.label}</span>
-                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-teal-100">
-                          {cluster.count || 0}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-400">
-                      Waiting for signal.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </aside>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.25fr)_minmax(260px,0.75fr)]">
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+            Top signal
+          </p>
+          <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-200">
+            {topSignal}
+          </p>
+        </div>
+        <div className="rounded-xl border border-amber-200/20 bg-amber-200/10 p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-100">
+            Ask next
+          </p>
+          <p className="mt-1 line-clamp-2 text-sm leading-6 text-amber-50">
+            {debriefPrompt}
+          </p>
+        </div>
+      </div>
 
-            <div className="space-y-4">
-              <InsightList title="Teacher brief" items={analysis.teacherBrief} />
-              <div className="grid gap-4 lg:grid-cols-2">
-                <InsightList
-                  title="Recurring questions"
-                  items={analysis.recurringQuestions}
-                />
-                <InsightList
-                  title="Unclear concepts"
-                  items={analysis.unclearConcepts}
-                />
-              </div>
-              <div className="grid gap-4 lg:grid-cols-2">
-                {analysis.commonErrors.length ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      Rubric flags
-                    </p>
-                    <div className="mt-3 space-y-2">
-                      {analysis.commonErrors.slice(0, 4).map((flag) => (
-                        <div
-                          key={flag.code}
-                          className="flex items-center justify-between gap-3 text-sm"
-                        >
-                          <span className="text-slate-200">
-                            {flag.code}: {flag.label}
-                          </span>
-                          <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-teal-100">
-                            {flag.count}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                {analysis.collectiveBlindSpot ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                      Collective blind spot
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-slate-200">
-                      {analysis.collectiveBlindSpot}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-              {analysis.trainerDebriefPrompt ? (
-                <div className="rounded-2xl border border-amber-200/20 bg-amber-200/10 p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-100">
-                    Debrief prompt
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-amber-50">
-                    {analysis.trainerDebriefPrompt}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          </div>
-        )}
+      {isStale ? (
+        <p className="mt-3 text-sm font-medium text-amber-100">
+          AI has not read the newest submissions yet.
+        </p>
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button
+          className="bg-teal-200 text-slate-950 hover:bg-teal-100"
+          disabled={isRefreshing}
+          onClick={onRefresh}
+        >
+          <RefreshCw
+            className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+          />
+          {isRefreshing ? 'Refreshing AI' : 'Refresh AI'}
+        </Button>
+        <Button
+          className="border-white/15 bg-white/[0.04] text-white hover:bg-white/[0.08] hover:text-white"
+          variant="outline"
+          onClick={onOpenInsights}
+        >
+          <PanelRightOpen className="h-4 w-4" />
+          View insights
+        </Button>
       </div>
     </section>
   )
 }
 
-function InsightList({
-  title,
-  items,
+function AiInsightsDrawer({
+  analysis,
+  error,
+  analyzedSubmissionCount,
+  currentSubmissionCount,
+  isOpen,
+  isRefreshing,
+  onOpenChange,
+  onRefresh,
 }: {
+  analysis?: NormalizedAnalysisOutput
+  error?: string
+  analyzedSubmissionCount?: number
+  currentSubmissionCount: number
+  isOpen: boolean
+  isRefreshing: boolean
+  onOpenChange: (open: boolean) => void
+  onRefresh: () => void
+}) {
+  const isStale =
+    analysis &&
+    analyzedSubmissionCount !== undefined &&
+    currentSubmissionCount > analyzedSubmissionCount
+  const readiness = analysis?.readiness
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="left-auto right-0 top-0 flex h-dvh max-h-dvh w-full max-w-[min(520px,100vw)] translate-x-0 translate-y-0 grid-rows-none flex-col gap-0 rounded-none border-l border-[#151927] bg-[#080b16] p-0 text-white sm:max-w-[520px]"
+        showCloseButton
+      >
+        <DialogHeader className="border-b border-white/10 px-5 py-4">
+          <div className="flex items-start gap-3 pr-10">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-200 text-slate-950">
+              <Bot className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-200">
+                Teacher-only AI
+              </p>
+              <DialogTitle className="font-serif text-2xl text-white">
+                Class insights
+              </DialogTitle>
+              <DialogDescription className="text-slate-300">
+                Concise class-level patterns for the teacher.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <Badge className="border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.06]">
+              {currentSubmissionCount} submissions
+            </Badge>
+            {analyzedSubmissionCount !== undefined ? (
+              <Badge className="border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.06]">
+                AI read {analyzedSubmissionCount}
+              </Badge>
+            ) : null}
+            {readiness ? (
+              <Badge className="bg-teal-200 text-slate-950 hover:bg-teal-200">
+                {readiness.readyCount}/{readiness.totalCount} ready
+              </Badge>
+            ) : null}
+          </div>
+
+          {isRefreshing ? (
+            <Alert className="mb-4 border-amber-200/20 bg-amber-200/10 text-amber-50">
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              <AlertDescription>
+                Refreshing class insights from the latest submissions.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {error ? (
+            <Alert className="mb-4 border-amber-200/20 bg-amber-200/10 text-amber-50">
+              <AlertDescription>
+                Using local fallback analysis: {error}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {isStale ? (
+            <Alert className="mb-4 border-amber-200/20 bg-amber-200/10 text-amber-50">
+              <AlertDescription>
+                AI was last refreshed at {analyzedSubmissionCount} submissions.
+                Refresh AI to include the newest maps.
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          {!analysis ? (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-white/[0.035] p-5 text-center">
+              <p className="font-serif text-2xl text-white">
+                Waiting for class signal.
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-300">
+                Seed demo data or wait for student activity, then refresh AI.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <InsightBlock title="Now">
+                <BulletList items={analysis.teacherBrief} />
+              </InsightBlock>
+
+              {analysis.trainerDebriefPrompt ? (
+                <InsightBlock title="Ask next" tone="warm">
+                  <p className="text-sm leading-6">
+                    {analysis.trainerDebriefPrompt}
+                  </p>
+                </InsightBlock>
+              ) : null}
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <InsightBlock title="Readiness">
+                  {readiness ? (
+                    <div>
+                      <p className="font-serif text-4xl font-semibold">
+                        {readiness.readyCount}/{readiness.totalCount}
+                      </p>
+                      <p className="mt-1 text-sm font-semibold">
+                        {readiness.recommendation.replaceAll('_', ' ')}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-slate-400">
+                      Waiting for signal.
+                    </p>
+                  )}
+                </InsightBlock>
+                <InsightBlock title="Tone">
+                  <p className="text-sm font-semibold">
+                    {analysis.emotionalTone.label || 'No signal yet'}
+                  </p>
+                  <p className="mt-1 text-sm leading-6 text-slate-300">
+                    {analysis.emotionalTone.explanation ||
+                      'More class activity is needed.'}
+                  </p>
+                </InsightBlock>
+              </div>
+
+              <InsightBlock title="Watch for">
+                <BulletList
+                  items={[
+                    ...analysis.unclearConcepts.slice(0, 3),
+                    ...analysis.recurringQuestions.slice(0, 2),
+                  ]}
+                />
+              </InsightBlock>
+
+              {analysis.collectiveBlindSpot ? (
+                <InsightBlock title="Collective blind spot">
+                  <p className="text-sm leading-6">
+                    {analysis.collectiveBlindSpot}
+                  </p>
+                </InsightBlock>
+              ) : null}
+
+              <InsightBlock title="Evidence">
+                <div className="space-y-3">
+                  {analysis.commonErrors.length ? (
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                        Rubric flags
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {analysis.commonErrors.slice(0, 4).map((flag) => (
+                          <div
+                            className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.04] px-3 py-2 text-sm text-slate-200"
+                            key={flag.code}
+                          >
+                            <span>
+                              {flag.code}: {flag.label}
+                            </span>
+                            <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-semibold text-teal-100">
+                              {flag.count}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {analysis.chatClusters.length ? (
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
+                        Chat clusters
+                      </p>
+                      <div className="mt-2 space-y-2">
+                        {analysis.chatClusters.map((cluster) => (
+                          <div
+                            className="flex items-center justify-between gap-3 rounded-lg bg-white/[0.04] px-3 py-2 text-sm text-slate-200"
+                            key={cluster.label}
+                          >
+                            <span>{cluster.label}</span>
+                            <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs font-semibold text-teal-100">
+                              {cluster.count || 0}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </InsightBlock>
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-white/10 bg-[#080b16] p-4">
+          <Button
+            className="w-full bg-teal-200 text-slate-950 hover:bg-teal-100"
+            disabled={isRefreshing}
+            onClick={onRefresh}
+          >
+            <RefreshCw
+              className={isRefreshing ? 'h-4 w-4 animate-spin' : 'h-4 w-4'}
+            />
+            {isRefreshing ? 'Refreshing AI' : 'Refresh AI'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function InsightBlock({
+  children,
+  title,
+  tone = 'default',
+}: {
+  children: React.ReactNode
   title: string
-  items: Array<string>
+  tone?: 'default' | 'warm'
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+    <section
+      className={[
+        'rounded-2xl border p-4',
+        tone === 'warm'
+          ? 'border-amber-200/20 bg-amber-200/10 text-amber-50'
+          : 'border-white/10 bg-white/[0.04] text-slate-200',
+      ].join(' ')}
+    >
+      <p
+        className={[
+          'mb-3 text-xs font-bold uppercase tracking-[0.16em]',
+          tone === 'warm' ? 'text-amber-100' : 'text-slate-400',
+        ].join(' ')}
+      >
         {title}
       </p>
-      {items.length ? (
-        <ul className="mt-3 space-y-2 text-sm leading-6 text-slate-200">
-          {items.slice(0, 5).map((item) => (
-            <li key={item} className="flex gap-2">
-              <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-300" />
-              <span>{item}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="mt-3 text-sm text-slate-400">Waiting for signal.</p>
-      )}
-    </div>
+      {children}
+    </section>
+  )
+}
+
+function BulletList({ items }: { items: Array<string> }) {
+  if (!items.length) {
+    return <p className="text-sm text-slate-400">Waiting for signal.</p>
+  }
+  return (
+    <ul className="space-y-2 text-sm leading-6">
+      {items.slice(0, 5).map((item) => (
+        <li className="flex gap-2" key={item}>
+          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-300" />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -1128,9 +1314,7 @@ function LiveSidePanel({
     <aside className="h-fit rounded-3xl border border-[var(--line)] bg-[rgba(255,253,248,0.7)] p-4">
       <section>
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-sm font-bold text-[var(--charcoal)]">
-            Roster
-          </h2>
+          <h2 className="text-sm font-bold text-[var(--charcoal)]">Roster</h2>
           <span className="rounded-full bg-[var(--paper-warm)] px-2.5 py-1 text-xs font-semibold text-[var(--charcoal-muted)]">
             {participants.length} joined
           </span>
@@ -1164,31 +1348,31 @@ function LiveSidePanel({
           </h2>
         </div>
         <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto pr-1">
-        {messages.length ? (
-          messages.slice(-80).map((message) => (
-            <div
-              key={message._id}
-              className="border-l-2 border-[var(--line-strong)] py-1 pl-3"
-            >
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-foreground">
-                  {message.displayName || message.authorRole}
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  {new Date(message.createdAt).toLocaleTimeString([], {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
-                </span>
+          {messages.length ? (
+            messages.slice(-80).map((message) => (
+              <div
+                key={message._id}
+                className="border-l-2 border-[var(--line-strong)] py-1 pl-3"
+              >
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-foreground">
+                    {message.displayName || message.authorRole}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {new Date(message.createdAt).toLocaleTimeString([], {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+                <p className="text-sm leading-5 text-foreground">
+                  {message.body}
+                </p>
               </div>
-              <p className="text-sm leading-5 text-foreground">
-                {message.body}
-              </p>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-muted-foreground">No messages yet.</p>
-        )}
+            ))
+          ) : (
+            <p className="text-sm text-muted-foreground">No messages yet.</p>
+          )}
         </div>
       </section>
     </aside>
