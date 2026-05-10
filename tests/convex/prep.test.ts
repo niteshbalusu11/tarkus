@@ -40,6 +40,13 @@ const studentIdentity = {
   name: 'Student',
 } satisfies Partial<UserIdentity>
 
+const otherStudentIdentity = {
+  issuer: 'test',
+  subject: 'other-prep-student',
+  tokenIdentifier: 'test|other-prep-student',
+  name: 'Other Student',
+} satisfies Partial<UserIdentity>
+
 function newTestBackend() {
   return convexTest(schema, modules)
 }
@@ -62,6 +69,16 @@ async function createStoredPresentation(
   status: 'generating' | 'ready' | 'failed' = 'ready',
 ) {
   const now = Date.now()
+  const storageId =
+    status === 'ready'
+      ? await t.run(async (ctx) =>
+          ctx.storage.store(
+            new Blob([new Uint8Array([1, 2, 3])], {
+              type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            }),
+          ),
+        )
+      : undefined
   const curriculumId = await t.run(async (ctx) =>
     ctx.db.insert('curricula', {
       workspaceId,
@@ -91,6 +108,9 @@ async function createStoredPresentation(
         ],
       },
       fileName: 'pillars-preview.pptx',
+      storageId,
+      downloadStatus: status === 'ready' ? 'ready' : undefined,
+      isPublished: false,
       ...(status === 'failed' ? { error: 'Deck generation failed' } : {}),
       createdAt: now,
       updatedAt: now,
@@ -400,6 +420,106 @@ describe('prep workspace auth', () => {
     await expect(
       teacher.query(api.prep.listPresentationMessages, { presentationId }),
     ).rejects.toThrow('Presentation not found')
+  })
+
+  it('publishes one final presentation per class for student viewing', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    const otherStudent = t.withIdentity(otherStudentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    await onboard(t, studentIdentity, 'student', 'Student')
+    await onboard(t, otherStudentIdentity, 'student', 'Other Student')
+    const { sessionId, code } = await teacher.mutation(
+      api.sessions.createSession,
+      {
+        title: 'Published slides class',
+      },
+    )
+    await student.mutation(api.sessions.joinSessionByCode, { code })
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+    const firstPresentationId = await createStoredPresentation(t, workspaceId)
+    const secondPresentationId = await createStoredPresentation(t, workspaceId)
+
+    expect(
+      await student.query(api.prep.getPublishedPresentationForStudentSession, {
+        sessionId,
+      }),
+    ).toBeNull()
+    await expect(
+      otherStudent.query(api.prep.getPublishedPresentationForStudentSession, {
+        sessionId,
+      }),
+    ).rejects.toThrow('Unauthorized')
+
+    await teacher.mutation(api.prep.publishPresentation, {
+      presentationId: firstPresentationId,
+    })
+
+    const studentDeck = await student.query(
+      api.prep.getPublishedPresentationForStudentSession,
+      { sessionId },
+    )
+    expect(studentDeck?._id).toBe(firstPresentationId)
+    expect(studentDeck?.downloadUrl).toContain('http')
+
+    const teacherDeck = await teacher.query(
+      api.prep.getPublishedPresentationForTeacherSession,
+      { sessionId },
+    )
+    expect(teacherDeck?._id).toBe(firstPresentationId)
+
+    await teacher.mutation(api.prep.publishPresentation, {
+      presentationId: secondPresentationId,
+    })
+
+    const latestStudentDeck = await student.query(
+      api.prep.getPublishedPresentationForStudentSession,
+      { sessionId },
+    )
+    expect(latestStudentDeck?._id).toBe(secondPresentationId)
+    await expect(
+      student.query(api.prep.getReadonlyPresentation, {
+        presentationId: firstPresentationId,
+      }),
+    ).rejects.toThrow('Presentation not found')
+  })
+
+  it('scopes publishing final presentations to the owning teacher', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const otherTeacher = t.withIdentity(otherTeacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    await onboard(t, otherTeacherIdentity, 'teacher', 'Other Trainer')
+    await onboard(t, studentIdentity, 'student', 'Student')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {})
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+    const presentationId = await createStoredPresentation(t, workspaceId)
+    const generatingPresentationId = await createStoredPresentation(
+      t,
+      workspaceId,
+      'generating',
+    )
+
+    await expect(
+      t.mutation(api.prep.publishPresentation, { presentationId }),
+    ).rejects.toThrow('Not authenticated')
+    await expect(
+      student.mutation(api.prep.publishPresentation, { presentationId }),
+    ).rejects.toThrow('Only teachers can use this')
+    await expect(
+      otherTeacher.mutation(api.prep.publishPresentation, { presentationId }),
+    ).rejects.toThrow('Unauthorized')
+    await expect(
+      teacher.mutation(api.prep.publishPresentation, {
+        presentationId: generatingPresentationId,
+      }),
+    ).rejects.toThrow('Only ready presentations can be published')
   })
 
   it('does not delete presentations while generation or edits are running', async () => {

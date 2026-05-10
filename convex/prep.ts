@@ -38,6 +38,23 @@ async function requireTeacherProfile(
   return profile
 }
 
+async function requireStudentProfile(
+  ctx: QueryCtx | MutationCtx,
+  identity: UserIdentity,
+) {
+  const profile = await getUserProfileByTokenIdentifier(
+    ctx,
+    identity.tokenIdentifier,
+  )
+  if (!profile) {
+    throw new Error('Onboarding required')
+  }
+  if (profile.role !== 'student') {
+    throw new Error('Only students can use this')
+  }
+  return profile
+}
+
 async function assertTeacherOwnsWorkspace(
   ctx: QueryCtx | MutationCtx,
   workspaceId: Id<'prepWorkspaces'>,
@@ -72,10 +89,94 @@ async function assertTeacherOwnsSession(
   return session
 }
 
+async function assertStudentCanAccessSession(
+  ctx: QueryCtx | MutationCtx,
+  sessionId: Id<'sessions'>,
+  tokenIdentifier: string,
+) {
+  const session = await ctx.db.get(sessionId)
+  if (!session || session.status === 'deleted') {
+    throw new Error('Session not found')
+  }
+  const participant = await ctx.db
+    .query('sessionParticipants')
+    .withIndex('by_sessionId_and_studentTokenIdentifier', (q) =>
+      q
+        .eq('sessionId', sessionId)
+        .eq('studentTokenIdentifier', tokenIdentifier),
+    )
+    .unique()
+  if (!participant) {
+    throw new Error('Unauthorized')
+  }
+  return session
+}
+
 function getAssetKind(args: { kind?: 'document' | 'image'; mimeType: string }) {
   return (
     args.kind || (args.mimeType.startsWith('image/') ? 'image' : 'document')
   )
+}
+
+async function getPublishedPresentationForWorkspace(
+  ctx: QueryCtx | MutationCtx,
+  workspaceId: Id<'prepWorkspaces'>,
+) {
+  return await ctx.db
+    .query('presentations')
+    .withIndex('by_workspaceId_and_isPublished', (q) =>
+      q.eq('workspaceId', workspaceId).eq('isPublished', true),
+    )
+    .first()
+}
+
+async function imageUrlsForWorkspace(
+  ctx: QueryCtx | MutationCtx,
+  workspaceId: Id<'prepWorkspaces'>,
+) {
+  const imageDocuments = await ctx.db
+    .query('prepDocuments')
+    .withIndex('by_workspaceId', (q) => q.eq('workspaceId', workspaceId))
+    .collect()
+  const imageUrls = await Promise.all(
+    imageDocuments
+      .filter(
+        (document) =>
+          document.kind === 'image' || document.mimeType.startsWith('image/'),
+      )
+      .map(async (document) => ({
+        fileName: document.fileName,
+        url: await ctx.storage.getUrl(document.storageId),
+      })),
+  )
+  return imageUrls.filter(
+    (image): image is { fileName: string; url: string } => image.url !== null,
+  )
+}
+
+async function readonlyPresentationPayload(
+  ctx: QueryCtx | MutationCtx,
+  presentation: Doc<'presentations'>,
+  workspace: Doc<'prepWorkspaces'>,
+) {
+  const session = workspace.sessionId ? await ctx.db.get(workspace.sessionId) : null
+  const downloadUrl = presentation.storageId
+    ? await ctx.storage.getUrl(presentation.storageId)
+    : null
+  return {
+    _id: presentation._id,
+    fileName: presentation.fileName,
+    status: presentation.status,
+    downloadStatus: presentation.downloadStatus,
+    slideSpec: presentation.slideSpec,
+    createdAt: presentation.createdAt,
+    isPublished: presentation.isPublished === true,
+    publishedAt: presentation.publishedAt,
+    workspaceTitle: workspace.title,
+    sessionTitle: session?.title || workspace.title,
+    imageUrls: await imageUrlsForWorkspace(ctx, presentation.workspaceId),
+    downloadUrl,
+  }
 }
 
 async function assertStoredFileWithinLimit(
@@ -372,6 +473,51 @@ export const listPresentations = query({
   },
 })
 
+export const publishPresentation = mutation({
+  args: { presentationId: v.id('presentations') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherProfile(ctx, identity)
+    const presentation = await ctx.db.get(args.presentationId)
+    if (!presentation) {
+      throw new Error('Presentation not found')
+    }
+    await assertTeacherOwnsWorkspace(
+      ctx,
+      presentation.workspaceId,
+      identity.tokenIdentifier,
+    )
+    if (presentation.status !== 'ready' || !presentation.storageId) {
+      throw new Error('Only ready presentations can be published')
+    }
+    if (presentation.editStatus === 'editing') {
+      throw new Error('Presentation is still updating')
+    }
+
+    const now = Date.now()
+    const previouslyPublished = await getPublishedPresentationForWorkspace(
+      ctx,
+      presentation.workspaceId,
+    )
+    if (
+      previouslyPublished &&
+      previouslyPublished._id !== args.presentationId
+    ) {
+      await ctx.db.patch(previouslyPublished._id, {
+        isPublished: false,
+        publishedAt: undefined,
+        updatedAt: now,
+      })
+    }
+    await ctx.db.patch(args.presentationId, {
+      isPublished: true,
+      publishedAt: now,
+      updatedAt: now,
+    })
+    return { published: true }
+  },
+})
+
 export const getPresentationDownloadUrl = query({
   args: { presentationId: v.id('presentations') },
   handler: async (ctx, args) => {
@@ -390,6 +536,93 @@ export const getPresentationDownloadUrl = query({
       return null
     }
     return await ctx.storage.getUrl(presentation.storageId)
+  },
+})
+
+export const getPublishedPresentationForTeacherSession = query({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherProfile(ctx, identity)
+    await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    const workspace = await ctx.db
+      .query('prepWorkspaces')
+      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
+      .unique()
+    if (!workspace) return null
+    const presentation = await getPublishedPresentationForWorkspace(
+      ctx,
+      workspace._id,
+    )
+    if (!presentation || presentation.status !== 'ready') return null
+    return await readonlyPresentationPayload(ctx, presentation, workspace)
+  },
+})
+
+export const getPublishedPresentationForStudentSession = query({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireStudentProfile(ctx, identity)
+    await assertStudentCanAccessSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    const workspace = await ctx.db
+      .query('prepWorkspaces')
+      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
+      .unique()
+    if (!workspace) return null
+    const presentation = await getPublishedPresentationForWorkspace(
+      ctx,
+      workspace._id,
+    )
+    if (!presentation || presentation.status !== 'ready') return null
+    return await readonlyPresentationPayload(ctx, presentation, workspace)
+  },
+})
+
+export const getReadonlyPresentation = query({
+  args: { presentationId: v.id('presentations') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    const profile = await getUserProfileByTokenIdentifier(
+      ctx,
+      identity.tokenIdentifier,
+    )
+    if (!profile) {
+      throw new Error('Onboarding required')
+    }
+    const presentation = await ctx.db.get(args.presentationId)
+    if (!presentation) {
+      throw new Error('Presentation not found')
+    }
+    const workspace = await ctx.db.get(presentation.workspaceId)
+    if (!workspace || !workspace.sessionId) {
+      throw new Error('Presentation not found')
+    }
+    if (profile.role === 'teacher') {
+      await assertTeacherOwnsWorkspace(
+        ctx,
+        presentation.workspaceId,
+        identity.tokenIdentifier,
+      )
+      return await readonlyPresentationPayload(ctx, presentation, workspace)
+    }
+    if (!presentation.isPublished || presentation.status !== 'ready') {
+      throw new Error('Presentation not found')
+    }
+    await assertStudentCanAccessSession(
+      ctx,
+      workspace.sessionId,
+      identity.tokenIdentifier,
+    )
+    return await readonlyPresentationPayload(ctx, presentation, workspace)
   },
 })
 
@@ -503,6 +736,8 @@ export const getPresentationPreview = query({
       editError: presentation.editError,
       downloadStatus: presentation.downloadStatus,
       downloadError: presentation.downloadError,
+      isPublished: presentation.isPublished === true,
+      publishedAt: presentation.publishedAt,
       slideSpec: presentation.slideSpec,
       createdAt: presentation.createdAt,
       workspaceTitle: workspace.title,
@@ -754,6 +989,7 @@ export const createPresentationRecord = internalMutation({
       fileName: args.fileName,
       editStatus: 'idle',
       downloadStatus: 'regenerating',
+      isPublished: false,
       createdAt: now,
       updatedAt: now,
     })

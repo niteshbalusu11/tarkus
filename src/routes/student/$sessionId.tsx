@@ -24,10 +24,12 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  Download,
   GripVertical,
   Landmark,
   Lock,
   MessageCircle,
+  MonitorPlay,
   Plus,
   Send,
   Sparkles,
@@ -117,6 +119,10 @@ function StudentSession() {
   const messages = useQuery(api.sessions.listMessages, {
     sessionId: typedSessionId,
   })
+  const publishedPresentation = useQuery(
+    api.prep.getPublishedPresentationForStudentSession,
+    { sessionId: typedSessionId },
+  )
   const sendMessage = useMutation(api.sessions.sendMessage)
   const submitPillars = useMutation(api.sessions.submitPillarsExercise)
   const [message, setMessage] = useState('')
@@ -399,6 +405,7 @@ function StudentSession() {
         </div>
 
         <aside className="space-y-4">
+          <StudentSlidesCard presentation={publishedPresentation} />
           <Card>
             <CardHeader>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
@@ -429,6 +436,60 @@ function StudentSession() {
         </aside>
       </section>
     </main>
+  )
+}
+
+function StudentSlidesCard({
+  presentation,
+}: {
+  presentation:
+    | {
+        _id: Id<'presentations'>
+        fileName: string
+        sessionTitle: string
+        downloadUrl: string | null
+      }
+    | null
+    | undefined
+}) {
+  if (presentation === undefined) {
+    return null
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
+          Class slides
+        </p>
+        <CardTitle className="font-serif text-2xl">
+          {presentation ? 'Shared deck' : 'Slides not shared yet'}
+        </CardTitle>
+        <CardDescription>
+          {presentation
+            ? 'Your teacher has published the final slides for this class.'
+            : 'Your teacher will publish slides here when they are ready.'}
+        </CardDescription>
+      </CardHeader>
+      {presentation ? (
+        <CardContent className="space-y-2">
+          <Button asChild className="w-full">
+            <a href={`/presentation/${presentation._id}/view`} target="_blank">
+              <MonitorPlay className="h-4 w-4" />
+              View slides
+            </a>
+          </Button>
+          {presentation.downloadUrl ? (
+            <Button asChild className="w-full" variant="outline">
+              <a href={presentation.downloadUrl} download={presentation.fileName}>
+                <Download className="h-4 w-4" />
+                Download
+              </a>
+            </Button>
+          ) : null}
+        </CardContent>
+      ) : null}
+    </Card>
   )
 }
 

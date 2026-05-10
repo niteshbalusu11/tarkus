@@ -189,11 +189,14 @@ export default defineSchema({
       ),
     ),
     downloadError: v.optional(v.string()),
+    isPublished: v.optional(v.boolean()),
+    publishedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index('by_workspaceId_and_createdAt', ['workspaceId', 'createdAt'])
-    .index('by_workspaceId_and_status', ['workspaceId', 'status']),
+    .index('by_workspaceId_and_status', ['workspaceId', 'status'])
+    .index('by_workspaceId_and_isPublished', ['workspaceId', 'isPublished']),
   presentationMessages: defineTable({
     presentationId: v.id('presentations'),
     workspaceId: v.id('prepWorkspaces'),

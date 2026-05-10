@@ -14,6 +14,7 @@ import { Route as JoinRouteImport } from './routes/join'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TeacherPrepRouteImport } from './routes/teacher.prep'
 import { Route as StudentSessionIdRouteImport } from './routes/student/$sessionId'
+import { Route as PresentationPresentationIdViewRouteImport } from './routes/presentation.$presentationId.view'
 import { Route as TeacherSessionSessionIdPrepRouteImport } from './routes/teacher.session.$sessionId.prep'
 import { Route as TeacherSessionSessionIdCurriculumExportRouteImport } from './routes/teacher.session.$sessionId.curriculum-export'
 import { Route as TeacherPresentationPresentationIdPreviewRouteImport } from './routes/teacher.presentation.$presentationId.preview'
@@ -43,6 +44,12 @@ const StudentSessionIdRoute = StudentSessionIdRouteImport.update({
   path: '/student/$sessionId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PresentationPresentationIdViewRoute =
+  PresentationPresentationIdViewRouteImport.update({
+    id: '/presentation/$presentationId/view',
+    path: '/presentation/$presentationId/view',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const TeacherSessionSessionIdPrepRoute =
   TeacherSessionSessionIdPrepRouteImport.update({
     id: '/session/$sessionId/prep',
@@ -68,6 +75,7 @@ export interface FileRoutesByFullPath {
   '/teacher': typeof TeacherRouteWithChildren
   '/student/$sessionId': typeof StudentSessionIdRoute
   '/teacher/prep': typeof TeacherPrepRoute
+  '/presentation/$presentationId/view': typeof PresentationPresentationIdViewRoute
   '/teacher/presentation/$presentationId/preview': typeof TeacherPresentationPresentationIdPreviewRoute
   '/teacher/session/$sessionId/curriculum-export': typeof TeacherSessionSessionIdCurriculumExportRoute
   '/teacher/session/$sessionId/prep': typeof TeacherSessionSessionIdPrepRoute
@@ -78,6 +86,7 @@ export interface FileRoutesByTo {
   '/teacher': typeof TeacherRouteWithChildren
   '/student/$sessionId': typeof StudentSessionIdRoute
   '/teacher/prep': typeof TeacherPrepRoute
+  '/presentation/$presentationId/view': typeof PresentationPresentationIdViewRoute
   '/teacher/presentation/$presentationId/preview': typeof TeacherPresentationPresentationIdPreviewRoute
   '/teacher/session/$sessionId/curriculum-export': typeof TeacherSessionSessionIdCurriculumExportRoute
   '/teacher/session/$sessionId/prep': typeof TeacherSessionSessionIdPrepRoute
@@ -89,6 +98,7 @@ export interface FileRoutesById {
   '/teacher': typeof TeacherRouteWithChildren
   '/student/$sessionId': typeof StudentSessionIdRoute
   '/teacher/prep': typeof TeacherPrepRoute
+  '/presentation/$presentationId/view': typeof PresentationPresentationIdViewRoute
   '/teacher/presentation/$presentationId/preview': typeof TeacherPresentationPresentationIdPreviewRoute
   '/teacher/session/$sessionId/curriculum-export': typeof TeacherSessionSessionIdCurriculumExportRoute
   '/teacher/session/$sessionId/prep': typeof TeacherSessionSessionIdPrepRoute
@@ -101,6 +111,7 @@ export interface FileRouteTypes {
     | '/teacher'
     | '/student/$sessionId'
     | '/teacher/prep'
+    | '/presentation/$presentationId/view'
     | '/teacher/presentation/$presentationId/preview'
     | '/teacher/session/$sessionId/curriculum-export'
     | '/teacher/session/$sessionId/prep'
@@ -111,6 +122,7 @@ export interface FileRouteTypes {
     | '/teacher'
     | '/student/$sessionId'
     | '/teacher/prep'
+    | '/presentation/$presentationId/view'
     | '/teacher/presentation/$presentationId/preview'
     | '/teacher/session/$sessionId/curriculum-export'
     | '/teacher/session/$sessionId/prep'
@@ -121,6 +133,7 @@ export interface FileRouteTypes {
     | '/teacher'
     | '/student/$sessionId'
     | '/teacher/prep'
+    | '/presentation/$presentationId/view'
     | '/teacher/presentation/$presentationId/preview'
     | '/teacher/session/$sessionId/curriculum-export'
     | '/teacher/session/$sessionId/prep'
@@ -131,6 +144,7 @@ export interface RootRouteChildren {
   JoinRoute: typeof JoinRoute
   TeacherRoute: typeof TeacherRouteWithChildren
   StudentSessionIdRoute: typeof StudentSessionIdRoute
+  PresentationPresentationIdViewRoute: typeof PresentationPresentationIdViewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -168,6 +182,13 @@ declare module '@tanstack/react-router' {
       path: '/student/$sessionId'
       fullPath: '/student/$sessionId'
       preLoaderRoute: typeof StudentSessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/presentation/$presentationId/view': {
+      id: '/presentation/$presentationId/view'
+      path: '/presentation/$presentationId/view'
+      fullPath: '/presentation/$presentationId/view'
+      preLoaderRoute: typeof PresentationPresentationIdViewRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/teacher/session/$sessionId/prep': {
@@ -218,6 +239,7 @@ const rootRouteChildren: RootRouteChildren = {
   JoinRoute: JoinRoute,
   TeacherRoute: TeacherRouteWithChildren,
   StudentSessionIdRoute: StudentSessionIdRoute,
+  PresentationPresentationIdViewRoute: PresentationPresentationIdViewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -14,6 +14,7 @@ import {
   Monitor,
   PenLine,
   Presentation,
+  Send,
   Sparkles,
   Trash2,
   Upload,
@@ -113,6 +114,7 @@ function PrepWorkspace() {
   const refineCurriculum = useAction(api.prepNode.refineCurriculum)
   const generatePresentation = useAction(api.prepNode.generatePresentation)
   const deletePresentation = useMutation(api.prep.deletePresentation)
+  const publishPresentation = useMutation(api.prep.publishPresentation)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const ensuredWorkspaceRef = useRef(false)
   const [draft, setDraft] = useState<CurriculumContent>(emptyCurriculum)
@@ -400,6 +402,11 @@ function PrepWorkspace() {
             onDelete={(presentationId) =>
               runAction(`delete-presentation-${presentationId}`, () =>
                 deletePresentation({ presentationId }),
+              )
+            }
+            onPublish={(presentationId) =>
+              runAction(`publish-presentation-${presentationId}`, () =>
+                publishPresentation({ presentationId }),
               )
             }
             onGenerate={() =>
@@ -1035,12 +1042,14 @@ function PresentationPanel({
   latestCurriculum,
   presentations,
   onDelete,
+  onPublish,
   onGenerate,
 }: {
   busy: string | null
   latestCurriculum: Doc<'curricula'> | null | undefined
   presentations: Array<Doc<'presentations'>>
   onDelete: (presentationId: Id<'presentations'>) => Promise<unknown>
+  onPublish: (presentationId: Id<'presentations'>) => Promise<unknown>
   onGenerate: () => Promise<unknown>
 }) {
   return (
@@ -1069,6 +1078,7 @@ function PresentationPanel({
               busy={busy}
               key={presentation._id}
               onDelete={onDelete}
+              onPublish={onPublish}
               presentation={presentation}
             />
           ))}
@@ -1085,10 +1095,12 @@ function PresentationPanel({
 function PresentationDownload({
   busy,
   onDelete,
+  onPublish,
   presentation,
 }: {
   busy: string | null
   onDelete: (presentationId: Id<'presentations'>) => Promise<unknown>
+  onPublish: (presentationId: Id<'presentations'>) => Promise<unknown>
   presentation: Doc<'presentations'>
 }) {
   const downloadUrl = useQuery(
@@ -1098,6 +1110,7 @@ function PresentationDownload({
       : 'skip',
   )
   const isDeleting = busy === `delete-presentation-${presentation._id}`
+  const isPublishing = busy === `publish-presentation-${presentation._id}`
   const isDeleteDisabled =
     isDeleting ||
     presentation.status === 'generating' ||
@@ -1112,7 +1125,7 @@ function PresentationDownload({
               {presentation.fileName}
             </p>
             <p className="mt-1 text-xs capitalize text-[var(--charcoal-muted)]">
-              {presentation.status}
+              {presentation.isPublished ? 'Published final deck' : presentation.status}
               {presentation.error ? `: ${presentation.error}` : ''}
             </p>
           </div>
@@ -1162,6 +1175,33 @@ function PresentationDownload({
               Preview
             </a>
           </Button>
+          {presentation.isPublished ? (
+            <Button asChild className="h-9 rounded-xl" size="sm">
+              <a
+                href={`/presentation/${presentation._id}/view`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <Monitor className="h-4 w-4" />
+                View slides
+              </a>
+            </Button>
+          ) : (
+            <Button
+              className="h-9 rounded-xl"
+              disabled={isPublishing || presentation.editStatus === 'editing'}
+              onClick={() => void onPublish(presentation._id)}
+              size="sm"
+              variant="outline"
+            >
+              {isPublishing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+              Publish
+            </Button>
+          )}
           {downloadUrl ? (
             <Button
               asChild

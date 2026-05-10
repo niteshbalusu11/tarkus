@@ -17,6 +17,7 @@ import {
   Flag,
   LayoutDashboard,
   MessageSquareText,
+  MonitorPlay,
   Pause,
   PanelRightOpen,
   Play,
@@ -120,6 +121,10 @@ function TeacherDashboard() {
   )
   const latestAnalysis = useQuery(
     api.sessions.getLatestAnalysis,
+    activeSessionId ? { sessionId: activeSessionId } : 'skip',
+  )
+  const publishedPresentation = useQuery(
+    api.prep.getPublishedPresentationForTeacherSession,
     activeSessionId ? { sessionId: activeSessionId } : 'skip',
   )
 
@@ -283,6 +288,11 @@ function TeacherDashboard() {
               onSeed={handleSeedAndAnalyze}
               onDelete={handleDelete}
               onPrep={handlePrepClass}
+              viewSlidesHref={
+                publishedPresentation
+                  ? `/presentation/${publishedPresentation._id}/view`
+                  : undefined
+              }
             />
             <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
               <div className="min-w-0 space-y-5">
@@ -496,6 +506,7 @@ function SessionHeader({
   onSeed,
   onDelete,
   onPrep,
+  viewSlidesHref,
 }: {
   title: string
   code: string
@@ -510,6 +521,7 @@ function SessionHeader({
   onSeed: () => void
   onDelete: () => void
   onPrep: () => void
+  viewSlidesHref?: string
 }) {
   const expires = new Date(expiresAt).toLocaleTimeString([], {
     hour: 'numeric',
@@ -584,6 +596,14 @@ function SessionHeader({
               <BookOpenText className="h-4 w-4" />
               Open prep
             </Button>
+            {viewSlidesHref ? (
+              <Button asChild variant="outline">
+                <a href={viewSlidesHref} rel="noreferrer" target="_blank">
+                  <MonitorPlay className="h-4 w-4" />
+                  View slides
+                </a>
+              </Button>
+            ) : null}
             {canStart ? (
               <Button disabled={busyAction === 'start'} onClick={onStart}>
                 <Play className="h-4 w-4" />
