@@ -370,6 +370,74 @@ describe('sessions auth and participant identity', () => {
     })
   })
 
+  it('lets students submit and update intake after joining before class starts', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Trainer')
+    await onboard(t, studentIdentity, 'student', 'Maya')
+    const { sessionId, code } = await teacher.mutation(
+      api.sessions.createSession,
+      {},
+    )
+
+    await student.mutation(api.sessions.joinSessionByCode, {
+      code,
+      displayName: 'Maya',
+    })
+    await student.mutation(api.sessions.submitIntakeForm, {
+      sessionId,
+      payload: {
+        version: 1,
+        form: 'student-intake',
+        ageRange: '18-24',
+        country: 'United States',
+        priorTraining: 'No, this is my first time',
+        violenceEffective: 2,
+        weaponsMoneyPower: 3,
+        peoplePower: 4,
+        nonviolenceWord: 'discipline',
+        authoritarianChange: 'Organized pressure shifts incentives.',
+      },
+    })
+    await student.mutation(api.sessions.submitIntakeForm, {
+      sessionId,
+      payload: {
+        version: 1,
+        form: 'student-intake',
+        ageRange: '18-24',
+        country: 'United States',
+        priorTraining: 'No, this is my first time',
+        violenceEffective: 2,
+        weaponsMoneyPower: 3,
+        peoplePower: 5,
+        nonviolenceWord: 'discipline',
+        authoritarianChange: 'Organized pressure shifts incentives.',
+      },
+    })
+
+    const ownIntake = await student.query(api.sessions.getMyIntakeSubmission, {
+      sessionId,
+    })
+    const pillarsSubmissions = await teacher.query(
+      api.sessions.listActivitySubmissions,
+      { sessionId },
+    )
+
+    expect(ownIntake).toMatchObject({
+      displayName: 'Maya',
+      type: 'intake',
+      payload: {
+        country: 'United States',
+        peoplePower: 5,
+      },
+    })
+    expect(pillarsSubmissions).toEqual([])
+    await expect(
+      teacher.query(api.sessions.getMyIntakeSubmission, { sessionId }),
+    ).rejects.toThrow('Only students can view their intake')
+  })
+
   it('validates structured Pillars v2 submissions', async () => {
     const t = newTestBackend()
     const teacher = t.withIdentity(teacherIdentity)

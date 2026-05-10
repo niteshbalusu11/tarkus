@@ -71,6 +71,166 @@ type MissionStep = {
   done: boolean
 }
 
+type IntakePayloadV1 = {
+  version: 1
+  form: 'student-intake'
+  ageRange: string
+  country: string
+  priorTraining: string
+  violenceEffective: number
+  weaponsMoneyPower: number
+  peoplePower: number
+  nonviolenceWord?: string
+  authoritarianChange?: string
+}
+
+type IntakeFormState = {
+  ageRange: string
+  country: string
+  priorTraining: string
+  violenceEffective: number | null
+  weaponsMoneyPower: number | null
+  peoplePower: number | null
+  nonviolenceWord: string
+  authoritarianChange: string
+}
+
+const EMPTY_INTAKE_FORM: IntakeFormState = {
+  ageRange: '',
+  country: '',
+  priorTraining: '',
+  violenceEffective: null,
+  weaponsMoneyPower: null,
+  peoplePower: null,
+  nonviolenceWord: '',
+  authoritarianChange: '',
+}
+
+const AGE_RANGE_OPTIONS = [
+  'Under 18',
+  '18-24',
+  '25-34',
+  '35-44',
+  '45-54',
+  '55 or older',
+]
+
+const PRIOR_TRAINING_OPTIONS = [
+  'No, this is my first time',
+  'Yes, once or twice (informal workshop or short course)',
+  'Yes, multiple times (I have some foundation in this)',
+  'Yes, extensively (I have studied or trained others in this)',
+]
+
+const COUNTRY_OPTIONS = [
+  'Afghanistan',
+  'Albania',
+  'Algeria',
+  'Argentina',
+  'Armenia',
+  'Australia',
+  'Austria',
+  'Azerbaijan',
+  'Bangladesh',
+  'Belarus',
+  'Belgium',
+  'Bolivia',
+  'Bosnia and Herzegovina',
+  'Brazil',
+  'Bulgaria',
+  'Cambodia',
+  'Cameroon',
+  'Canada',
+  'Chile',
+  'China',
+  'Colombia',
+  'Costa Rica',
+  "Cote d'Ivoire",
+  'Croatia',
+  'Cuba',
+  'Czechia',
+  'Democratic Republic of the Congo',
+  'Denmark',
+  'Dominican Republic',
+  'Ecuador',
+  'Egypt',
+  'El Salvador',
+  'Ethiopia',
+  'France',
+  'Georgia',
+  'Germany',
+  'Ghana',
+  'Greece',
+  'Guatemala',
+  'Haiti',
+  'Honduras',
+  'Hong Kong',
+  'Hungary',
+  'India',
+  'Indonesia',
+  'Iran',
+  'Iraq',
+  'Ireland',
+  'Israel',
+  'Italy',
+  'Japan',
+  'Jordan',
+  'Kazakhstan',
+  'Kenya',
+  'Kosovo',
+  'Kyrgyzstan',
+  'Lebanon',
+  'Malaysia',
+  'Mexico',
+  'Morocco',
+  'Myanmar',
+  'Nepal',
+  'Netherlands',
+  'New Zealand',
+  'Nicaragua',
+  'Nigeria',
+  'Norway',
+  'Pakistan',
+  'Palestine',
+  'Panama',
+  'Paraguay',
+  'Peru',
+  'Philippines',
+  'Poland',
+  'Portugal',
+  'Romania',
+  'Russia',
+  'Rwanda',
+  'Senegal',
+  'Serbia',
+  'Singapore',
+  'Slovakia',
+  'Somalia',
+  'South Africa',
+  'South Korea',
+  'Spain',
+  'Sri Lanka',
+  'Sudan',
+  'Sweden',
+  'Switzerland',
+  'Syria',
+  'Taiwan',
+  'Tanzania',
+  'Thailand',
+  'Tunisia',
+  'Turkey',
+  'Uganda',
+  'Ukraine',
+  'United Kingdom',
+  'United States',
+  'Uruguay',
+  'Uzbekistan',
+  'Venezuela',
+  'Vietnam',
+  'Yemen',
+  'Zimbabwe',
+]
+
 function StudentRoute() {
   return (
     <AuthGate requiredRole="student" title="Sign in to continue class">
@@ -132,11 +292,18 @@ function StudentSession() {
       sessionId: typedSessionId,
     },
   )
+  const existingIntakeSubmission = useQuery(
+    api.sessions.getMyIntakeSubmission,
+    {
+      sessionId: typedSessionId,
+    },
+  )
   const publishedPresentation = useQuery(
     api.prep.getPublishedPresentationForStudentSession,
     { sessionId: typedSessionId },
   )
   const sendMessage = useMutation(api.sessions.sendMessage)
+  const submitIntake = useMutation(api.sessions.submitIntakeForm)
   const submitPillars = useMutation(api.sessions.submitPillarsExercise)
   const [message, setMessage] = useState('')
   const [isAnonymous, setIsAnonymous] = useState(false)
@@ -148,6 +315,13 @@ function StudentSession() {
   const [reflection, setReflection] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [intakeForm, setIntakeForm] =
+    useState<IntakeFormState>(EMPTY_INTAKE_FORM)
+  const [intakeSubmitted, setIntakeSubmitted] = useState(false)
+  const [intakeError, setIntakeError] = useState<string | null>(null)
+  const [hydratedIntakeSubmissionId, setHydratedIntakeSubmissionId] =
+    useState<Id<'activitySubmissions'> | null>(null)
+  const [isIntakeMinimized, setIsIntakeMinimized] = useState(false)
   const [activeMission, setActiveMission] = useState<MissionId>('holder')
   const [hydratedSubmissionId, setHydratedSubmissionId] =
     useState<Id<'activitySubmissions'> | null>(null)
@@ -162,7 +336,21 @@ function StudentSession() {
 
   const activity = sessionData?.activity
   const isClassActive = sessionData?.session.status === 'active'
+  const canUseIntake = Boolean(
+    sessionData?.session.status &&
+    sessionData.session.status !== 'ended' &&
+    sessionData.session.status !== 'deleted',
+  )
   const firstMoves = pillars.slice(0, 3)
+  const canSubmitIntake = Boolean(
+    canUseIntake &&
+    intakeForm.ageRange &&
+    intakeForm.country.trim() &&
+    intakeForm.priorTraining &&
+    intakeForm.violenceEffective &&
+    intakeForm.weaponsMoneyPower &&
+    intakeForm.peoplePower,
+  )
   const canSubmit = Boolean(
     isClassActive &&
     activity &&
@@ -185,6 +373,39 @@ function StudentSession() {
       setMessage('')
     } finally {
       setIsSending(false)
+    }
+  }
+
+  function updateIntakeForm(patch: Partial<IntakeFormState>) {
+    setIntakeForm((current) => ({ ...current, ...patch }))
+  }
+
+  async function handleSubmitIntake() {
+    if (!canSubmitIntake) return
+    setIntakeError(null)
+    const payload: IntakePayloadV1 = {
+      version: 1,
+      form: 'student-intake',
+      ageRange: intakeForm.ageRange,
+      country: intakeForm.country.trim(),
+      priorTraining: intakeForm.priorTraining,
+      violenceEffective: intakeForm.violenceEffective || 3,
+      weaponsMoneyPower: intakeForm.weaponsMoneyPower || 3,
+      peoplePower: intakeForm.peoplePower || 3,
+      nonviolenceWord: intakeForm.nonviolenceWord.trim(),
+      authoritarianChange: intakeForm.authoritarianChange.trim(),
+    }
+    try {
+      await submitIntake({
+        sessionId: typedSessionId,
+        payload,
+      })
+      setIntakeSubmitted(true)
+      setIsIntakeMinimized(true)
+    } catch (caught) {
+      setIntakeError(
+        caught instanceof Error ? caught.message : 'Could not submit intake',
+      )
     }
   }
 
@@ -269,6 +490,37 @@ function StudentSession() {
     const config = activity?.config as { scenario?: string } | undefined
     return config?.scenario || SCHOOL_UNIFORM_SCENARIO
   }, [activity])
+
+  useEffect(() => {
+    if (
+      !existingIntakeSubmission ||
+      existingIntakeSubmission._id === hydratedIntakeSubmissionId
+    ) {
+      return
+    }
+
+    const payload = existingIntakeSubmission.payload as Partial<IntakePayloadV1>
+    setIntakeForm({
+      ageRange: payload.ageRange || '',
+      country: payload.country || '',
+      priorTraining: payload.priorTraining || '',
+      violenceEffective:
+        typeof payload.violenceEffective === 'number'
+          ? payload.violenceEffective
+          : null,
+      weaponsMoneyPower:
+        typeof payload.weaponsMoneyPower === 'number'
+          ? payload.weaponsMoneyPower
+          : null,
+      peoplePower:
+        typeof payload.peoplePower === 'number' ? payload.peoplePower : null,
+      nonviolenceWord: payload.nonviolenceWord || '',
+      authoritarianChange: payload.authoritarianChange || '',
+    })
+    setIntakeSubmitted(true)
+    setIsIntakeMinimized(true)
+    setHydratedIntakeSubmissionId(existingIntakeSubmission._id)
+  }, [existingIntakeSubmission, hydratedIntakeSubmissionId])
 
   useEffect(() => {
     if (
@@ -365,7 +617,7 @@ function StudentSession() {
                 </Badge>
                 <Badge variant="outline" className="gap-1.5">
                   <Sparkles className="h-3.5 w-3.5" />
-                  {submitted ? 'Pillars submitted' : 'Pillars open'}
+                  {intakeSubmitted ? 'Intake submitted' : 'Intake open'}
                 </Badge>
               </div>
               <h1 className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
@@ -399,6 +651,17 @@ function StudentSession() {
           />
 
           <aside className="space-y-3 lg:sticky lg:top-4">
+            <IntakeWidget
+              form={intakeForm}
+              updateForm={updateIntakeForm}
+              submitted={intakeSubmitted}
+              canSubmit={canSubmitIntake}
+              canUse={canUseIntake}
+              error={intakeError}
+              onSubmit={handleSubmitIntake}
+              isMinimized={isIntakeMinimized}
+              setIsMinimized={setIsIntakeMinimized}
+            />
             <PillarsActivityWidget
               missionSteps={missionSteps}
               activeMission={activeMission}
@@ -570,6 +833,282 @@ function LiveClassThread({
         </div>
       </form>
     </section>
+  )
+}
+
+function IntakeWidget({
+  form,
+  updateForm,
+  submitted,
+  canSubmit,
+  canUse,
+  error,
+  onSubmit,
+  isMinimized,
+  setIsMinimized,
+}: {
+  form: IntakeFormState
+  updateForm: (patch: Partial<IntakeFormState>) => void
+  submitted: boolean
+  canSubmit: boolean
+  canUse: boolean
+  error: string | null
+  onSubmit: () => void
+  isMinimized: boolean
+  setIsMinimized: (value: boolean) => void
+}) {
+  if (isMinimized) {
+    return (
+      <section className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.92)] p-4 shadow-[0_18px_60px_rgba(28,28,28,0.06)]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
+              Intake widget
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-foreground">
+              {submitted ? 'Intake submitted' : 'Intake minimized'}
+            </h2>
+            <p className="mt-1 text-sm leading-5 text-muted-foreground">
+              {submitted
+                ? 'Your trainer has your intake responses.'
+                : 'Reopen before class starts.'}
+            </p>
+          </div>
+          {submitted ? (
+            <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-[var(--amber-deep)]" />
+          ) : (
+            <Circle className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
+          )}
+        </div>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-3"
+          onClick={() => setIsMinimized(false)}
+        >
+          {submitted ? 'Edit' : 'Reopen'}
+        </Button>
+      </section>
+    )
+  }
+
+  return (
+    <section className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.92)] p-4 shadow-[0_18px_60px_rgba(28,28,28,0.06)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
+            Intake widget
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-foreground">
+            Student intake
+          </h2>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">
+            Complete before the session begins.
+          </p>
+        </div>
+        <Badge
+          variant={submitted ? 'default' : 'secondary'}
+          className="gap-1.5"
+        >
+          <ClipboardCheck className="h-3.5 w-3.5" />
+          {submitted ? 'Saved' : 'Open'}
+        </Badge>
+      </div>
+
+      {submitted ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-3"
+          onClick={() => setIsMinimized(true)}
+        >
+          Minimize completed widget
+        </Button>
+      ) : null}
+
+      <div className="mt-4 space-y-4">
+        <div className="space-y-2">
+          <Label>Age</Label>
+          <div className="grid grid-cols-2 gap-2">
+            {AGE_RANGE_OPTIONS.map((option) => (
+              <ChoiceButton
+                key={option}
+                disabled={!canUse}
+                selected={form.ageRange === option}
+                onClick={() => updateForm({ ageRange: option })}
+              >
+                {option}
+              </ChoiceButton>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="intake-country">
+            Nationality / country of origin
+          </Label>
+          <Input
+            id="intake-country"
+            list="intake-country-options"
+            value={form.country}
+            onChange={(event) => updateForm({ country: event.target.value })}
+            placeholder="Search country..."
+            disabled={!canUse}
+          />
+          <datalist id="intake-country-options">
+            {COUNTRY_OPTIONS.map((country) => (
+              <option key={country} value={country} />
+            ))}
+          </datalist>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Prior strategic nonviolence training</Label>
+          <div className="space-y-2">
+            {PRIOR_TRAINING_OPTIONS.map((option) => (
+              <ChoiceButton
+                key={option}
+                disabled={!canUse}
+                selected={form.priorTraining === option}
+                onClick={() => updateForm({ priorTraining: option })}
+              >
+                {option}
+              </ChoiceButton>
+            ))}
+          </div>
+        </div>
+
+        <LikertQuestion
+          disabled={!canUse}
+          label="Violence is usually the most effective tool for fundamental political change."
+          value={form.violenceEffective}
+          onChange={(violenceEffective) => updateForm({ violenceEffective })}
+        />
+        <div className="space-y-2">
+          <Label htmlFor="nonviolence-word">
+            Optional: what comes to mind when you hear "nonviolence"?
+          </Label>
+          <Input
+            id="nonviolence-word"
+            value={form.nonviolenceWord}
+            onChange={(event) =>
+              updateForm({ nonviolenceWord: event.target.value })
+            }
+            disabled={!canUse}
+          />
+        </div>
+        <LikertQuestion
+          disabled={!canUse}
+          label="Political power ultimately comes from those who control weapons and money."
+          value={form.weaponsMoneyPower}
+          onChange={(weaponsMoneyPower) => updateForm({ weaponsMoneyPower })}
+        />
+        <LikertQuestion
+          disabled={!canUse}
+          label="Sustained organized pressure by ordinary people can force powerful rulers to change or step down."
+          value={form.peoplePower}
+          onChange={(peoplePower) => updateForm({ peoplePower })}
+        />
+        <div className="space-y-2">
+          <Label htmlFor="authoritarian-change">
+            Optional: how do you think change happens in authoritarian contexts?
+          </Label>
+          <Textarea
+            id="authoritarian-change"
+            className="min-h-20 resize-none"
+            value={form.authoritarianChange}
+            onChange={(event) =>
+              updateForm({ authoritarianChange: event.target.value })
+            }
+            disabled={!canUse}
+          />
+        </div>
+
+        {error ? (
+          <Alert variant="destructive">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <Button
+          className="h-10 w-full"
+          disabled={!canSubmit}
+          onClick={onSubmit}
+        >
+          {submitted ? 'Update intake' : 'Submit intake'}
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+function ChoiceButton({
+  children,
+  disabled,
+  selected,
+  onClick,
+}: {
+  children: string
+  disabled: boolean
+  selected: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={[
+        'rounded-lg border px-2.5 py-2 text-left text-xs font-semibold leading-5 transition disabled:opacity-60',
+        selected
+          ? 'border-[var(--charcoal)] bg-[var(--charcoal)] text-white'
+          : 'border-[var(--line)] bg-[#fffdf8] text-foreground hover:border-[var(--line-strong)]',
+      ].join(' ')}
+    >
+      {children}
+    </button>
+  )
+}
+
+function LikertQuestion({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string
+  value: number | null
+  onChange: (value: number) => void
+  disabled: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="grid grid-cols-5 gap-1">
+        {[1, 2, 3, 4, 5].map((rating) => (
+          <button
+            key={rating}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(rating)}
+            className={[
+              'h-8 rounded-md border text-xs font-semibold transition disabled:opacity-60',
+              value === rating
+                ? 'border-[var(--charcoal)] bg-[var(--charcoal)] text-white'
+                : 'border-[var(--line)] bg-[var(--paper)] text-foreground hover:border-[var(--line-strong)]',
+            ].join(' ')}
+          >
+            {rating}
+          </button>
+        ))}
+      </div>
+      <div className="flex justify-between text-[11px] text-muted-foreground">
+        <span>Strongly disagree</span>
+        <span>Strongly agree</span>
+      </div>
+    </div>
   )
 }
 

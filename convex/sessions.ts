@@ -28,6 +28,12 @@ const PILLARS_CONFIG = {
   ],
 }
 
+const INTAKE_CONFIG = {
+  title: 'Student Intake Form',
+  description:
+    'Complete before the session begins. This helps your trainer understand who is in the room.',
+}
+
 function requireIdentity(identity: UserIdentity | null) {
   if (!identity) {
     throw new Error('Not authenticated')
@@ -138,6 +144,30 @@ async function assertCanAccessSession(
   return { session, role: 'student' as const, participant }
 }
 
+async function ensureIntakeActivity(
+  ctx: MutationCtx,
+  sessionId: Id<'sessions'>,
+) {
+  const existing = await ctx.db
+    .query('activities')
+    .withIndex('by_sessionId_and_type', (q) =>
+      q.eq('sessionId', sessionId).eq('type', 'intake'),
+    )
+    .first()
+  if (existing) {
+    return existing
+  }
+  const activityId = await ctx.db.insert('activities', {
+    sessionId,
+    type: 'intake',
+    title: 'Student Intake Form',
+    status: 'open',
+    config: INTAKE_CONFIG,
+    createdAt: Date.now(),
+  })
+  return await ctx.db.get(activityId)
+}
+
 function displayNameFromParticipant(
   participant: Doc<'sessionParticipants'> | null,
   identity: UserIdentity,
@@ -206,6 +236,55 @@ function validatePillarsPayload(payload: unknown) {
   assertShortText(value.reflection, 'Reflection')
 }
 
+function assertLikert(value: unknown, label: string) {
+  const rating = Number(value)
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+    throw new Error(`${label} must be between 1 and 5`)
+  }
+}
+
+function validateIntakePayload(payload: unknown) {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Intake payload is required')
+  }
+
+  const value = payload as {
+    version?: unknown
+    form?: unknown
+    ageRange?: unknown
+    country?: unknown
+    priorTraining?: unknown
+    violenceEffective?: unknown
+    weaponsMoneyPower?: unknown
+    peoplePower?: unknown
+    nonviolenceWord?: unknown
+    authoritarianChange?: unknown
+  }
+
+  if (value.version !== 1 || value.form !== 'student-intake') {
+    throw new Error('Unsupported intake form')
+  }
+  assertShortText(value.ageRange, 'Age range', 40)
+  assertShortText(value.country, 'Country', 120)
+  assertShortText(value.priorTraining, 'Prior training', 120)
+  assertLikert(value.violenceEffective, 'Violence rating')
+  assertLikert(value.weaponsMoneyPower, 'Power rating')
+  assertLikert(value.peoplePower, 'Strategy rating')
+
+  if (
+    value.nonviolenceWord !== undefined &&
+    typeof value.nonviolenceWord !== 'string'
+  ) {
+    throw new Error('Nonviolence response must be text')
+  }
+  if (
+    value.authoritarianChange !== undefined &&
+    typeof value.authoritarianChange !== 'string'
+  ) {
+    throw new Error('Change response must be text')
+  }
+}
+
 export const createSession = mutation({
   args: { title: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -242,6 +321,15 @@ export const createSession = mutation({
       title: 'Pillars of Support: School Uniforms',
       status: 'closed',
       config: PILLARS_CONFIG,
+      createdAt: now,
+    })
+
+    await ctx.db.insert('activities', {
+      sessionId,
+      type: 'intake',
+      title: 'Student Intake Form',
+      status: 'open',
+      config: INTAKE_CONFIG,
       createdAt: now,
     })
 
@@ -324,6 +412,7 @@ export const joinSessionByCode = mutation({
       .unique()
 
     if (existing) {
+      await ensureIntakeActivity(ctx, session._id)
       const displayName = args.displayName?.trim()
       await ctx.db.patch(existing._id, {
         lastSeenAt: Date.now(),
@@ -331,6 +420,8 @@ export const joinSessionByCode = mutation({
       })
       return { sessionId: session._id, participantId: existing._id }
     }
+
+    await ensureIntakeActivity(ctx, session._id)
 
     const participantId = await ctx.db.insert('sessionParticipants', {
       sessionId: session._id,
@@ -431,9 +522,18 @@ export const listActivitySubmissions = query({
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
     await assertCanAccessSession(ctx, args.sessionId, identity.tokenIdentifier)
+    const activity = await ctx.db
+      .query('activities')
+      .withIndex('by_sessionId_and_type', (q) =>
+        q.eq('sessionId', args.sessionId).eq('type', 'pillars'),
+      )
+      .first()
+    if (!activity) {
+      return []
+    }
     return await ctx.db
       .query('activitySubmissions')
-      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
+      .withIndex('by_activityId', (q) => q.eq('activityId', activity._id))
       .order('asc')
       .take(100)
   },
@@ -468,6 +568,95 @@ export const getMyPillarsSubmission = query({
           .eq('studentTokenIdentifier', identity.tokenIdentifier),
       )
       .unique()
+  },
+})
+
+export const getMyIntakeSubmission = query({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    const access = await assertCanAccessSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    if (access.role !== 'student') {
+      throw new Error('Only students can view their intake')
+    }
+    const activity = await ctx.db
+      .query('activities')
+      .withIndex('by_sessionId_and_type', (q) =>
+        q.eq('sessionId', args.sessionId).eq('type', 'intake'),
+      )
+      .first()
+    if (!activity) {
+      return null
+    }
+    return await ctx.db
+      .query('activitySubmissions')
+      .withIndex('by_activityId_and_studentTokenIdentifier', (q) =>
+        q
+          .eq('activityId', activity._id)
+          .eq('studentTokenIdentifier', identity.tokenIdentifier),
+      )
+      .unique()
+  },
+})
+
+export const submitIntakeForm = mutation({
+  args: {
+    sessionId: v.id('sessions'),
+    payload: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    const access = await assertCanAccessSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    if (access.role !== 'student') {
+      throw new Error('Only students can submit intake forms')
+    }
+    if (access.session.status === 'ended') {
+      throw new Error('Class has ended')
+    }
+    validateIntakePayload(args.payload)
+
+    const activity = await ensureIntakeActivity(ctx, args.sessionId)
+    if (!activity) {
+      throw new Error('Intake form unavailable')
+    }
+
+    const existing = await ctx.db
+      .query('activitySubmissions')
+      .withIndex('by_activityId_and_studentTokenIdentifier', (q) =>
+        q
+          .eq('activityId', activity._id)
+          .eq('studentTokenIdentifier', identity.tokenIdentifier),
+      )
+      .unique()
+
+    const now = Date.now()
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        displayName: displayNameFromParticipant(access.participant, identity),
+        payload: args.payload,
+        updatedAt: now,
+      })
+      return existing._id
+    }
+
+    return await ctx.db.insert('activitySubmissions', {
+      sessionId: args.sessionId,
+      activityId: activity._id,
+      studentTokenIdentifier: identity.tokenIdentifier,
+      displayName: displayNameFromParticipant(access.participant, identity),
+      type: 'intake',
+      payload: args.payload,
+      submittedAt: now,
+      updatedAt: now,
+    })
   },
 })
 

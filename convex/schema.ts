@@ -58,7 +58,7 @@ export default defineSchema({
   }).index('by_sessionId_and_createdAt', ['sessionId', 'createdAt']),
   activities: defineTable({
     sessionId: v.id('sessions'),
-    type: v.union(v.literal('pillars')),
+    type: v.union(v.literal('pillars'), v.literal('intake')),
     title: v.string(),
     status: v.union(v.literal('open'), v.literal('closed')),
     config: v.any(),
@@ -71,7 +71,7 @@ export default defineSchema({
     activityId: v.id('activities'),
     studentTokenIdentifier: v.string(),
     displayName: v.optional(v.string()),
-    type: v.union(v.literal('pillars')),
+    type: v.union(v.literal('pillars'), v.literal('intake')),
     payload: v.any(),
     submittedAt: v.number(),
     updatedAt: v.number(),
