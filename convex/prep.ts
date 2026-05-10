@@ -393,6 +393,30 @@ export const getPresentationDownloadUrl = query({
   },
 })
 
+export const listPresentationMessages = query({
+  args: { presentationId: v.id('presentations') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherProfile(ctx, identity)
+    const presentation = await ctx.db.get(args.presentationId)
+    if (!presentation) {
+      throw new Error('Presentation not found')
+    }
+    await assertTeacherOwnsWorkspace(
+      ctx,
+      presentation.workspaceId,
+      identity.tokenIdentifier,
+    )
+    return await ctx.db
+      .query('presentationMessages')
+      .withIndex('by_presentationId_and_createdAt', (q) =>
+        q.eq('presentationId', args.presentationId),
+      )
+      .order('asc')
+      .take(100)
+  },
+})
+
 export const getPresentationPreview = query({
   args: { presentationId: v.id('presentations') },
   handler: async (ctx, args) => {
@@ -433,6 +457,10 @@ export const getPresentationPreview = query({
       fileName: presentation.fileName,
       status: presentation.status,
       error: presentation.error,
+      editStatus: presentation.editStatus,
+      editError: presentation.editError,
+      downloadStatus: presentation.downloadStatus,
+      downloadError: presentation.downloadError,
       slideSpec: presentation.slideSpec,
       createdAt: presentation.createdAt,
       workspaceTitle: workspace.title,
@@ -665,6 +693,8 @@ export const createPresentationRecord = internalMutation({
       status: 'generating',
       slideSpec: args.slideSpec,
       fileName: args.fileName,
+      editStatus: 'idle',
+      downloadStatus: 'regenerating',
       createdAt: now,
       updatedAt: now,
     })
@@ -687,6 +717,8 @@ export const savePresentationResult = internalMutation({
       status: args.error ? 'failed' : 'ready',
       storageId: args.storageId,
       error: args.error,
+      downloadStatus: args.error ? 'failed' : 'ready',
+      downloadError: args.error,
       updatedAt: now,
     })
     if (!args.error) {
@@ -695,5 +727,135 @@ export const savePresentationResult = internalMutation({
         updatedAt: now,
       })
     }
+  },
+})
+
+export const beginPresentationEdit = internalMutation({
+  args: {
+    presentationId: v.id('presentations'),
+    teacherTokenIdentifier: v.string(),
+    instruction: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const presentation = await ctx.db.get(args.presentationId)
+    if (!presentation) {
+      throw new Error('Presentation not found')
+    }
+    if (presentation.status !== 'ready') {
+      throw new Error('Presentation is not ready to edit')
+    }
+    if (presentation.editStatus === 'editing') {
+      throw new Error('A presentation edit is already in progress')
+    }
+    const instruction = args.instruction.trim()
+    if (!instruction) {
+      throw new Error('Instruction is required')
+    }
+    const workspace = await assertTeacherOwnsWorkspace(
+      ctx,
+      presentation.workspaceId,
+      args.teacherTokenIdentifier,
+    )
+    const curriculum = await ctx.db.get(presentation.curriculumId)
+    const documents = await ctx.db
+      .query('prepDocuments')
+      .withIndex('by_workspaceId', (q) =>
+        q.eq('workspaceId', presentation.workspaceId),
+      )
+      .collect()
+    const messages = await ctx.db
+      .query('presentationMessages')
+      .withIndex('by_presentationId_and_createdAt', (q) =>
+        q.eq('presentationId', args.presentationId),
+      )
+      .order('desc')
+      .take(12)
+    const now = Date.now()
+    await ctx.db.insert('presentationMessages', {
+      presentationId: args.presentationId,
+      workspaceId: presentation.workspaceId,
+      teacherTokenIdentifier: args.teacherTokenIdentifier,
+      role: 'teacher',
+      body: instruction,
+      createdAt: now,
+    })
+    await ctx.db.patch(args.presentationId, {
+      editStatus: 'editing',
+      editError: undefined,
+      downloadStatus: 'regenerating',
+      downloadError: undefined,
+      updatedAt: now,
+    })
+    return {
+      presentation,
+      workspace,
+      curriculum,
+      documents,
+      messages: messages.reverse(),
+    }
+  },
+})
+
+export const savePresentationSlideSpecDraft = internalMutation({
+  args: {
+    presentationId: v.id('presentations'),
+    teacherTokenIdentifier: v.string(),
+    slideSpec: v.any(),
+  },
+  handler: async (ctx, args) => {
+    const presentation = await ctx.db.get(args.presentationId)
+    if (!presentation) {
+      throw new Error('Presentation not found')
+    }
+    await assertTeacherOwnsWorkspace(
+      ctx,
+      presentation.workspaceId,
+      args.teacherTokenIdentifier,
+    )
+    await ctx.db.patch(args.presentationId, {
+      slideSpec: args.slideSpec,
+      updatedAt: Date.now(),
+    })
+  },
+})
+
+export const finishPresentationEdit = internalMutation({
+  args: {
+    presentationId: v.id('presentations'),
+    teacherTokenIdentifier: v.string(),
+    editStatus: v.union(v.literal('idle'), v.literal('failed')),
+    downloadStatus: v.union(v.literal('ready'), v.literal('failed')),
+    storageId: v.optional(v.id('_storage')),
+    editError: v.optional(v.string()),
+    downloadError: v.optional(v.string()),
+    assistantMessage: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const presentation = await ctx.db.get(args.presentationId)
+    if (!presentation) {
+      throw new Error('Presentation not found')
+    }
+    await assertTeacherOwnsWorkspace(
+      ctx,
+      presentation.workspaceId,
+      args.teacherTokenIdentifier,
+    )
+    const now = Date.now()
+    await ctx.db.patch(args.presentationId, {
+      ...(args.storageId ? { storageId: args.storageId } : {}),
+      editStatus: args.editStatus,
+      editError: args.editError,
+      downloadStatus: args.downloadStatus,
+      downloadError: args.downloadError,
+      updatedAt: now,
+    })
+    await ctx.db.insert('presentationMessages', {
+      presentationId: args.presentationId,
+      workspaceId: presentation.workspaceId,
+      teacherTokenIdentifier: args.teacherTokenIdentifier,
+      role: 'assistant',
+      body: args.assistantMessage,
+      createdAt: now,
+    })
   },
 })

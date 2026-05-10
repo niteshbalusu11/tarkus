@@ -177,9 +177,29 @@ export default defineSchema({
     storageId: v.optional(v.id('_storage')),
     fileName: v.string(),
     error: v.optional(v.string()),
+    editStatus: v.optional(
+      v.union(v.literal('idle'), v.literal('editing'), v.literal('failed')),
+    ),
+    editError: v.optional(v.string()),
+    downloadStatus: v.optional(
+      v.union(
+        v.literal('ready'),
+        v.literal('regenerating'),
+        v.literal('failed'),
+      ),
+    ),
+    downloadError: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index('by_workspaceId_and_createdAt', ['workspaceId', 'createdAt'])
     .index('by_workspaceId_and_status', ['workspaceId', 'status']),
+  presentationMessages: defineTable({
+    presentationId: v.id('presentations'),
+    workspaceId: v.id('prepWorkspaces'),
+    teacherTokenIdentifier: v.string(),
+    role: v.union(v.literal('teacher'), v.literal('assistant')),
+    body: v.string(),
+    createdAt: v.number(),
+  }).index('by_presentationId_and_createdAt', ['presentationId', 'createdAt']),
 })

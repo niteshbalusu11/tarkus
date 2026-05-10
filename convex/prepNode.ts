@@ -100,12 +100,15 @@ function fallbackCurriculum(input: {
         durationMinutes: 10,
         teachingNotes:
           'Introduce pillar analysis as a way to understand why authority depends on organized cooperation.',
-        discussionPrompts: ['Where does power appear to sit, and who helps make it work?'],
+        discussionPrompts: [
+          'Where does power appear to sit, and who helps make it work?',
+        ],
       },
       {
         title: 'Obedience and sources of power',
         durationMinutes: 25,
-        teachingNotes: excerpt || 'Introduce the key concepts from the uploaded documents.',
+        teachingNotes:
+          excerpt || 'Introduce the key concepts from the uploaded documents.',
         discussionPrompts: [
           'What changes when power is understood as cooperation?',
           'Which forms of obedience are visible, and which are hidden?',
@@ -116,7 +119,8 @@ function fallbackCurriculum(input: {
         durationMinutes: 30,
         teachingNotes:
           'Show how to break a broad pillar into actors, incentives, dependencies, and reachable subgroups.',
-        activity: 'Run the Pillars of Support exercise using the school uniform scenario.',
+        activity:
+          'Run the Pillars of Support exercise using the school uniform scenario.',
         discussionPrompts: [
           'Which pillar is too broad and needs to be split?',
           'Which sub-pillar is easiest to understand or reach?',
@@ -137,7 +141,9 @@ function fallbackCurriculum(input: {
         durationMinutes: 20,
         teachingNotes:
           'Close by comparing student reasoning patterns and clarifying the difference between leverage and accessibility.',
-        discussionPrompts: ['What changed after students ranked accessibility?'],
+        discussionPrompts: [
+          'What changed after students ranked accessibility?',
+        ],
       },
     ],
     keyConcepts: [
@@ -147,7 +153,11 @@ function fallbackCurriculum(input: {
       'Push vs pull',
       'Accessibility',
     ],
-    materialsNeeded: ['Projector or shared screen', 'Student devices', 'TARKUS live session'],
+    materialsNeeded: [
+      'Projector or shared screen',
+      'Student devices',
+      'TARKUS live session',
+    ],
     assessmentIdeas: [
       'Students submit a Pillars map.',
       'Students write a reflection on accessibility versus formal power.',
@@ -160,7 +170,8 @@ function normalizeCurriculum(value: unknown, fallback: CurriculumContent) {
   const candidate = value as Partial<CurriculumContent> | null
   if (!candidate || typeof candidate !== 'object') return fallback
   return {
-    title: typeof candidate.title === 'string' ? candidate.title : fallback.title,
+    title:
+      typeof candidate.title === 'string' ? candidate.title : fallback.title,
     audience:
       typeof candidate.audience === 'string'
         ? candidate.audience
@@ -202,7 +213,9 @@ function normalizeCurriculum(value: unknown, fallback: CurriculumContent) {
           .filter((section) => section.title.trim())
       : fallback.agenda,
     keyConcepts: Array.isArray(candidate.keyConcepts)
-      ? candidate.keyConcepts.filter((item): item is string => typeof item === 'string')
+      ? candidate.keyConcepts.filter(
+          (item): item is string => typeof item === 'string',
+        )
       : fallback.keyConcepts,
     materialsNeeded: Array.isArray(candidate.materialsNeeded)
       ? candidate.materialsNeeded.filter(
@@ -238,13 +251,15 @@ function slideSpecFromCurriculum(curriculum: CurriculumContent): SlideSpec {
         speakerNotes: 'Use this slide to set expectations for the session.',
       },
       ...curriculum.agenda.slice(0, 8).map((section) => ({
-        type: section.activity ? 'activity' as const : 'concept' as const,
+        type: section.activity ? ('activity' as const) : ('concept' as const),
         title: section.title,
         bullets: [
           `${section.durationMinutes} minutes`,
           section.teachingNotes,
           ...(section.activity ? [`Activity: ${section.activity}`] : []),
-        ].filter(Boolean).slice(0, 4),
+        ]
+          .filter(Boolean)
+          .slice(0, 4),
         speakerNotes: section.discussionPrompts.join('\n'),
       })),
       {
@@ -253,13 +268,15 @@ function slideSpecFromCurriculum(curriculum: CurriculumContent): SlideSpec {
         bullets: curriculum.agenda
           .flatMap((section) => section.discussionPrompts)
           .slice(0, 5),
-        speakerNotes: 'Use these prompts when students need a concrete entry point.',
+        speakerNotes:
+          'Use these prompts when students need a concrete entry point.',
       },
       {
         type: 'summary',
         title: 'Close and assess',
         bullets: curriculum.assessmentIdeas.slice(0, 4),
-        speakerNotes: 'Move into the TARKUS live assessment or classroom debrief.',
+        speakerNotes:
+          'Move into the TARKUS live assessment or classroom debrief.',
       },
     ],
   }
@@ -331,23 +348,26 @@ async function openRouterJson<T>({
         ]
       : JSON.stringify(user)
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://tarkus.local',
-      'X-Title': 'TARKUS',
+  const response = await fetch(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://tarkus.local',
+        'X-Title': 'TARKUS',
+      },
+      body: JSON.stringify({
+        model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: userContent },
+        ],
+      }),
     },
-    body: JSON.stringify({
-      model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: userContent },
-      ],
-    }),
-  })
+  )
 
   if (!response.ok) {
     return { output: fallback, error: `OpenRouter returned ${response.status}` }
@@ -364,7 +384,11 @@ async function openRouterJson<T>({
   }
 }
 
-async function extractTextFromDocument(blob: Blob, fileName: string, mimeType: string) {
+async function extractTextFromDocument(
+  blob: Blob,
+  fileName: string,
+  mimeType: string,
+) {
   const limit = getPrepUploadLimit('document')
   if (blob.size > limit) {
     throw new Error(`document uploads are limited to ${formatBytes(limit)}`)
@@ -373,10 +397,7 @@ async function extractTextFromDocument(blob: Blob, fileName: string, mimeType: s
   const buffer = Buffer.from(arrayBuffer)
   const lower = fileName.toLowerCase()
 
-  if (
-    mimeType.includes('wordprocessingml') ||
-    lower.endsWith('.docx')
-  ) {
+  if (mimeType.includes('wordprocessingml') || lower.endsWith('.docx')) {
     const mammoth = await import('mammoth')
     const result = await mammoth.extractRawText({ buffer })
     return cleanText(result.value)
@@ -389,7 +410,11 @@ async function extractTextFromDocument(blob: Blob, fileName: string, mimeType: s
     return cleanText(result.text || '')
   }
 
-  if (mimeType.startsWith('text/') || lower.endsWith('.txt') || lower.endsWith('.md')) {
+  if (
+    mimeType.startsWith('text/') ||
+    lower.endsWith('.txt') ||
+    lower.endsWith('.md')
+  ) {
     return cleanText(buffer.toString('utf8'))
   }
 
@@ -429,7 +454,9 @@ export const extractDocumentText = action({
       return { extractedText }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Could not extract document text'
+        error instanceof Error
+          ? error.message
+          : 'Could not extract document text'
       await ctx.runMutation(internal.prep.saveDocumentExtraction, {
         documentId: args.documentId,
         error: message,
@@ -655,12 +682,153 @@ export const generatePresentation = action({
       return { presentationId, error: result.error }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Could not generate presentation'
+        error instanceof Error
+          ? error.message
+          : 'Could not generate presentation'
       await ctx.runMutation(internal.prep.savePresentationResult, {
         presentationId,
         error: message,
       })
       throw new Error(message)
+    }
+  },
+})
+
+export const refinePresentation = action({
+  args: {
+    presentationId: v.id('presentations'),
+    instruction: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    const instruction = args.instruction.trim()
+    if (!instruction) {
+      throw new Error('Instruction is required')
+    }
+    const input: {
+      presentation: Doc<'presentations'>
+      workspace: Doc<'prepWorkspaces'>
+      curriculum: Doc<'curricula'> | null
+      documents: Array<Doc<'prepDocuments'>>
+      messages: Array<Doc<'presentationMessages'>>
+    } = await ctx.runMutation(internal.prep.beginPresentationEdit, {
+      presentationId: args.presentationId,
+      teacherTokenIdentifier: identity.tokenIdentifier,
+      instruction,
+    })
+    const imageDocs = input.documents.filter((document) =>
+      isImageDocument(document),
+    )
+    const images = await loadPreparedImages(ctx, imageDocs)
+    const curriculumFallback = input.curriculum
+      ? slideSpecFromCurriculum(
+          normalizeCurriculum(
+            input.curriculum.content,
+            fallbackCurriculum({
+              title: input.workspace.title,
+              audience: input.workspace.audience,
+              durationMinutes: input.workspace.durationMinutes,
+              documentText: '',
+              prepBrief:
+                input.workspace.prepBrief || DEFAULT_PILLARS_PREP_BRIEF,
+            }),
+          ),
+        )
+      : {
+          title: input.workspace.title,
+          slides: [
+            {
+              type: 'title' as const,
+              title: input.workspace.title,
+              bullets: [input.workspace.audience || 'In-person student class'],
+              speakerNotes: input.workspace.prepBrief || '',
+            },
+          ],
+        }
+    const allowedImageFileNames = imageDocs.map((document) => document.fileName)
+    const currentSlideSpec = normalizeSlideSpec(
+      input.presentation.slideSpec,
+      curriculumFallback,
+      allowedImageFileNames,
+    )
+    const result = await openRouterJson<unknown>({
+      fallback: currentSlideSpec,
+      system:
+        'You are TARKUS, editing a classroom PowerPoint outline for strategic nonviolence training. Return JSON only with shape {"title":"string","slides":[{"type":"title|concept|discussion|activity|summary","title":"string","bullets":["string"],"speakerNotes":"string","imageFileName":"optional exact uploaded image filename"}]}. Apply the teacher instruction directly to the slide deck. Preserve the deck structure unless the teacher asks to add, remove, or reorder slides. Use concise slide text and richer speaker notes. Keep the deck to 6-14 slides. Only use imageFileName values from the uploadedImages list.',
+      user: {
+        currentSlideSpec,
+        teacherInstruction: instruction,
+        teacherPrepBrief:
+          input.workspace.prepBrief || DEFAULT_PILLARS_PREP_BRIEF,
+        recentMessages: input.messages.map((message) => ({
+          role: message.role,
+          body: message.body,
+        })),
+        uploadedImages: imageDocs.map((document) => ({
+          fileName: document.fileName,
+          mimeType: document.mimeType,
+        })),
+      },
+      imageInputs: images,
+    })
+
+    if (result.error) {
+      await ctx.runMutation(internal.prep.finishPresentationEdit, {
+        presentationId: args.presentationId,
+        teacherTokenIdentifier: identity.tokenIdentifier,
+        editStatus: 'failed',
+        downloadStatus: input.presentation.storageId ? 'ready' : 'failed',
+        editError: result.error,
+        ...(input.presentation.storageId
+          ? {}
+          : { downloadError: result.error }),
+        assistantMessage: `I could not update the presentation. ${result.error}`,
+      })
+      return { presentationId: args.presentationId, error: result.error }
+    }
+
+    const slideSpec = normalizeSlideSpec(
+      result.output,
+      currentSlideSpec,
+      allowedImageFileNames,
+    )
+    await ctx.runMutation(internal.prep.savePresentationSlideSpecDraft, {
+      presentationId: args.presentationId,
+      teacherTokenIdentifier: identity.tokenIdentifier,
+      slideSpec,
+    })
+
+    try {
+      const bytes = await buildPptx(slideSpec, images)
+      const storageId = await ctx.storage.store(
+        new Blob([bytes], {
+          type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        }),
+      )
+      await ctx.runMutation(internal.prep.finishPresentationEdit, {
+        presentationId: args.presentationId,
+        teacherTokenIdentifier: identity.tokenIdentifier,
+        editStatus: 'idle',
+        downloadStatus: 'ready',
+        storageId,
+        assistantMessage:
+          'Updated the presentation and refreshed the PPTX download.',
+      })
+      return { presentationId: args.presentationId }
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Could not refresh the downloadable PPTX'
+      await ctx.runMutation(internal.prep.finishPresentationEdit, {
+        presentationId: args.presentationId,
+        teacherTokenIdentifier: identity.tokenIdentifier,
+        editStatus: 'idle',
+        downloadStatus: 'failed',
+        downloadError: message,
+        assistantMessage: `Updated the preview, but could not refresh the downloadable PPTX. ${message}`,
+      })
+      return { presentationId: args.presentationId, error: message }
     }
   },
 })
@@ -674,7 +842,8 @@ function normalizeSlideSpec(
   if (!candidate || typeof candidate !== 'object') return fallback
   const allowedImages = new Set(allowedImageFileNames)
   return {
-    title: typeof candidate.title === 'string' ? candidate.title : fallback.title,
+    title:
+      typeof candidate.title === 'string' ? candidate.title : fallback.title,
     slides: Array.isArray(candidate.slides)
       ? candidate.slides
           .map((slide) => {
@@ -712,9 +881,9 @@ function normalizeSlideSpec(
 function slugify(value: string) {
   return (
     value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
       .slice(0, 64) || 'tarkus-curriculum'
   )
 }
@@ -797,8 +966,15 @@ async function buildPptx(
     const bullets = slide.bullets.slice(0, 5)
     page.addText(
       bullets.length
-        ? bullets.map((bullet) => ({ text: bullet, options: { bullet: { indent: 16 } } }))
-        : [{ text: 'Use this moment to connect the source material to the room.' }],
+        ? bullets.map((bullet) => ({
+            text: bullet,
+            options: { bullet: { indent: 16 } },
+          }))
+        : [
+            {
+              text: 'Use this moment to connect the source material to the room.',
+            },
+          ],
       {
         x: 0.95,
         y: isTitle ? 3.15 : 2.25,

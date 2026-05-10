@@ -1,21 +1,27 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { useQuery } from 'convex/react'
+import { useAction, useQuery } from 'convex/react'
 import {
   ArrowLeft,
   ArrowRight,
+  Loader2,
   Maximize2,
+  MessageSquareText,
   Minimize2,
   MonitorPlay,
   PanelRightClose,
   PanelRightOpen,
+  Send,
+  X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { FormEvent } from 'react'
 
 import { api } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import AuthGate from '../components/AuthGate'
 import { Alert, AlertDescription, AlertTitle } from '../components/ui/alert'
 import { Button } from '../components/ui/button'
+import { Textarea } from '../components/ui/textarea'
 
 export const Route = createFileRoute(
   '/teacher/presentation/$presentationId/preview',
@@ -64,10 +70,18 @@ function PresentationPreview() {
   const preview = useQuery(api.prep.getPresentationPreview, {
     presentationId: typedPresentationId,
   })
+  const messages = useQuery(api.prep.listPresentationMessages, {
+    presentationId: typedPresentationId,
+  })
+  const refinePresentation = useAction(api.prepNode.refinePresentation)
   const presenterRef = useRef<HTMLDivElement | null>(null)
   const [slideIndex, setSlideIndex] = useState(() => getInitialSlideIndex())
   const [showNotes, setShowNotes] = useState(false)
+  const [isChatOpen, setIsChatOpen] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [instruction, setInstruction] = useState('')
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const slideSpec = useMemo(
     () => normalizeSlideSpec(preview?.slideSpec),
     [preview?.slideSpec],
@@ -81,6 +95,13 @@ function PresentationPreview() {
   )
   const currentSlideIndex = clamp(slideIndex, 0, slideSpec.slides.length - 1)
   const currentSlide = slideSpec.slides[currentSlideIndex]
+  const isEditing = isSubmitting || preview?.editStatus === 'editing' || false
+
+  useEffect(() => {
+    if (preview?.editStatus === 'editing') {
+      setIsChatOpen(true)
+    }
+  }, [preview?.editStatus])
 
   const goToSlide = useCallback(
     (nextIndex: number) => {
@@ -96,6 +117,33 @@ function PresentationPreview() {
     }
     await presenterRef.current?.requestFullscreen()
   }, [])
+
+  async function handleRefinePresentation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const nextInstruction = instruction.trim()
+    if (!nextInstruction || isEditing) return
+    setSubmitError(null)
+    setInstruction('')
+    setIsSubmitting(true)
+    try {
+      const result = await refinePresentation({
+        presentationId: typedPresentationId,
+        instruction: nextInstruction,
+      })
+      if (result.error) {
+        setSubmitError(result.error)
+      }
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : 'Could not update presentation',
+      )
+      setInstruction(nextInstruction)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
 
   useEffect(() => {
     setSlideIndex((current) => clamp(current, 0, slideSpec.slides.length - 1))
@@ -174,12 +222,12 @@ function PresentationPreview() {
   }
 
   return (
-    <main className="bg-[var(--warm-paper)] px-3 py-4 sm:px-5">
+    <main className="overflow-x-hidden bg-[var(--warm-paper)] px-3 py-4 sm:px-5">
       <div
         ref={presenterRef}
-        className="mx-auto flex min-h-[calc(100vh-9rem)] max-w-7xl flex-col gap-3 bg-[var(--warm-paper)] text-[var(--charcoal)] fullscreen:h-screen fullscreen:max-w-none fullscreen:bg-[#141414] fullscreen:p-4"
+        className="flex min-h-[calc(100vh-9rem)] w-full flex-col gap-3 bg-[var(--warm-paper)] text-[var(--charcoal)] fullscreen:h-screen fullscreen:max-w-none fullscreen:bg-[#141414] fullscreen:p-4"
       >
-        <header className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 shadow-[0_10px_30px_rgba(28,28,28,0.06)] fullscreen:border-[#303030] fullscreen:bg-[#202020] fullscreen:text-[#faf9f6]">
+        <header className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-3 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-2 shadow-[0_10px_30px_rgba(28,28,28,0.06)] fullscreen:border-[#303030] fullscreen:bg-[#202020] fullscreen:text-[#faf9f6]">
           <div className="min-w-0">
             <p className="truncate text-sm font-bold">
               {preview.sessionTitle || slideSpec.title}
@@ -238,13 +286,7 @@ function PresentationPreview() {
           </div>
         </header>
 
-        <div
-          className={
-            showNotes
-              ? 'grid flex-1 gap-3 lg:grid-cols-[minmax(0,1fr)_320px]'
-              : 'flex flex-1 items-center justify-center'
-          }
-        >
+        <div className="relative flex flex-1 items-center justify-center">
           <SlideFrame
             imageUrl={
               currentSlide.imageFileName
@@ -255,7 +297,7 @@ function PresentationPreview() {
             slideIndex={currentSlideIndex}
           />
           {showNotes ? (
-            <aside className="rounded-lg border border-[var(--line)] bg-[var(--surface)] p-4 text-sm leading-6 text-[var(--charcoal)] shadow-[0_10px_30px_rgba(28,28,28,0.06)] fullscreen:border-[#303030] fullscreen:bg-[#202020] fullscreen:text-[#faf9f6]">
+            <aside className="absolute right-0 top-0 z-20 max-h-[45vh] w-full max-w-sm overflow-y-auto rounded-lg border border-[var(--line)] bg-[var(--surface-strong)] p-4 text-sm leading-6 text-[var(--charcoal)] shadow-[0_14px_40px_rgba(28,28,28,0.12)] fullscreen:border-[#303030] fullscreen:bg-[#202020] fullscreen:text-[#faf9f6]">
               <h2 className="text-xs font-bold uppercase text-[var(--amber-deep)] fullscreen:text-[#f2dfad]">
                 Speaker Notes
               </h2>
@@ -264,9 +306,159 @@ function PresentationPreview() {
               </p>
             </aside>
           ) : null}
+          <PresentationEditPanel
+            downloadError={preview.downloadError}
+            downloadStatus={preview.downloadStatus}
+            editError={preview.editError || submitError}
+            editStatus={preview.editStatus}
+            instruction={instruction}
+            isOpen={isChatOpen}
+            isEditing={isEditing}
+            messages={messages || []}
+            onClose={() => setIsChatOpen(false)}
+            onInstructionChange={setInstruction}
+            onOpen={() => setIsChatOpen(true)}
+            onSubmit={handleRefinePresentation}
+          />
         </div>
       </div>
     </main>
+  )
+}
+
+function PresentationEditPanel({
+  downloadError,
+  downloadStatus,
+  editError,
+  editStatus,
+  instruction,
+  isOpen,
+  isEditing,
+  messages,
+  onClose,
+  onInstructionChange,
+  onOpen,
+  onSubmit,
+}: {
+  downloadError?: string
+  downloadStatus?: 'ready' | 'regenerating' | 'failed'
+  editError?: string | null
+  editStatus?: 'idle' | 'editing' | 'failed'
+  instruction: string
+  isOpen: boolean
+  isEditing: boolean
+  messages: Array<{
+    _id: string
+    role: 'teacher' | 'assistant'
+    body: string
+  }>
+  onClose: () => void
+  onInstructionChange: (value: string) => void
+  onOpen: () => void
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  if (!isOpen) {
+    return (
+      <Button
+        aria-label="Open AI editor"
+        className="absolute bottom-3 right-3 z-30 h-12 rounded-full px-4 shadow-[0_14px_34px_rgba(28,28,28,0.22)]"
+        onClick={onOpen}
+      >
+        {isEditing ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <MessageSquareText className="h-4 w-4" />
+        )}
+        Edit with AI
+      </Button>
+    )
+  }
+
+  return (
+    <aside className="absolute bottom-3 right-3 z-30 flex h-[min(620px,calc(100vh-13rem))] w-[min(390px,calc(100vw-2rem))] flex-col gap-3 rounded-xl border border-[var(--line)] bg-[var(--surface-strong)] p-3 shadow-[0_24px_70px_rgba(28,28,28,0.2)] fullscreen:bottom-4 fullscreen:right-4 fullscreen:h-[min(620px,calc(100vh-7rem))] fullscreen:border-[#303030] fullscreen:bg-[#202020] fullscreen:text-[#faf9f6]">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 text-sm font-bold">
+          <MessageSquareText className="h-4 w-4 text-[var(--amber-deep)] fullscreen:text-[#f2dfad]" />
+          Edit with AI
+        </h2>
+        <div className="flex items-center gap-2">
+          {editStatus === 'editing' || downloadStatus === 'regenerating' ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-[rgba(201,146,26,0.14)] px-2 py-1 text-xs font-semibold text-[var(--amber-deep)] fullscreen:text-[#f2dfad]">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Updating
+            </span>
+          ) : null}
+          <Button
+            aria-label="Minimize AI editor"
+            onClick={onClose}
+            size="icon-sm"
+            variant="outline"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {editError ? (
+        <Alert className="border-[rgba(176,64,43,0.28)] bg-[rgba(176,64,43,0.08)] text-[var(--charcoal)] fullscreen:text-[#faf9f6]">
+          <AlertTitle>Could not edit</AlertTitle>
+          <AlertDescription>{editError}</AlertDescription>
+        </Alert>
+      ) : null}
+      {downloadStatus === 'failed' && downloadError ? (
+        <Alert className="border-[rgba(176,64,43,0.28)] bg-[rgba(176,64,43,0.08)] text-[var(--charcoal)] fullscreen:text-[#faf9f6]">
+          <AlertTitle>Download not refreshed</AlertTitle>
+          <AlertDescription>{downloadError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-lg border border-[var(--line)] bg-[#fffdf8] p-3 fullscreen:border-[#303030] fullscreen:bg-[#181818]">
+        {messages.length ? (
+          messages.map((message) => (
+            <div
+              className={
+                message.role === 'teacher'
+                  ? 'ml-6 rounded-2xl bg-[#1c1c1c] p-3 text-sm leading-6 text-[#fffdf8] fullscreen:bg-[#2c2c2c]'
+                  : 'mr-6 rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3 text-sm leading-6 text-[var(--charcoal)] fullscreen:border-[#303030] fullscreen:bg-[#242424] fullscreen:text-[#faf9f6]'
+              }
+              key={message._id}
+            >
+              <p className="mb-1 text-xs font-bold uppercase text-[var(--amber-deep)] fullscreen:text-[#f2dfad]">
+                {message.role === 'teacher' ? 'You' : 'TARKUS'}
+              </p>
+              {message.body}
+            </div>
+          ))
+        ) : (
+          <p className="rounded-2xl border border-dashed border-[var(--line)] bg-[var(--paper)] p-4 text-sm leading-6 text-[var(--charcoal-muted)] fullscreen:border-[#303030] fullscreen:bg-[#242424] fullscreen:text-[#c9c2b5]">
+            Ask for changes like “make slide 3 more interactive,” “add a quick
+            debrief slide,” or “shorten this deck for 45 minutes.”
+          </p>
+        )}
+      </div>
+
+      <form className="space-y-2" onSubmit={onSubmit}>
+        <Textarea
+          className="min-h-24 bg-[#fffefa] text-[var(--charcoal)]"
+          disabled={isEditing}
+          onChange={(event) => onInstructionChange(event.target.value)}
+          placeholder="Tell TARKUS what to change..."
+          value={instruction}
+        />
+        <Button
+          className="h-10 w-full rounded-xl"
+          disabled={isEditing || !instruction.trim()}
+          type="submit"
+        >
+          {isEditing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Send className="h-4 w-4" />
+          )}
+          Update preview
+        </Button>
+      </form>
+    </aside>
   )
 }
 

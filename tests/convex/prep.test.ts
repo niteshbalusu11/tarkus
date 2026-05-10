@@ -2,7 +2,7 @@ import { convexTest } from 'convex-test'
 import type { UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
-import { api } from '../../convex/_generated/api'
+import { api, internal } from '../../convex/_generated/api'
 import type { Id } from '../../convex/_generated/dataModel'
 import {
   MAX_LLM_DOCUMENT_CONTEXT_CHARS,
@@ -275,6 +275,91 @@ describe('prep workspace auth', () => {
 
     expect(preview.status).toBe('failed')
     expect(preview.error).toBe('Deck generation failed')
+  })
+
+  it('scopes presentation edit messages to the owning teacher', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const otherTeacher = t.withIdentity(otherTeacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    await onboard(t, otherTeacherIdentity, 'teacher', 'Other Trainer')
+    await onboard(t, studentIdentity, 'student', 'Student')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {})
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+    const presentationId = await createStoredPresentation(t, workspaceId)
+    await t.run(async (ctx) =>
+      ctx.db.insert('presentationMessages', {
+        presentationId,
+        workspaceId,
+        teacherTokenIdentifier: teacherIdentity.tokenIdentifier,
+        role: 'assistant',
+        body: 'Ready to revise the deck.',
+        createdAt: Date.now(),
+      }),
+    )
+
+    await expect(
+      t.query(api.prep.listPresentationMessages, { presentationId }),
+    ).rejects.toThrow('Not authenticated')
+    await expect(
+      student.query(api.prep.listPresentationMessages, { presentationId }),
+    ).rejects.toThrow('Only teachers can use this')
+    await expect(
+      otherTeacher.query(api.prep.listPresentationMessages, {
+        presentationId,
+      }),
+    ).rejects.toThrow('Unauthorized')
+
+    const messages = await teacher.query(api.prep.listPresentationMessages, {
+      presentationId,
+    })
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      role: 'assistant',
+      body: 'Ready to revise the deck.',
+    })
+  })
+
+  it('locks presentation edits to one running edit at a time', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {})
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+    const presentationId = await createStoredPresentation(t, workspaceId)
+
+    await t.mutation(internal.prep.beginPresentationEdit, {
+      presentationId,
+      teacherTokenIdentifier: teacherIdentity.tokenIdentifier,
+      instruction: 'Make slide 1 more discussion oriented.',
+    })
+
+    await expect(
+      t.mutation(internal.prep.beginPresentationEdit, {
+        presentationId,
+        teacherTokenIdentifier: teacherIdentity.tokenIdentifier,
+        instruction: 'Also add a case study slide.',
+      }),
+    ).rejects.toThrow('already in progress')
+
+    const preview = await teacher.query(api.prep.getPresentationPreview, {
+      presentationId,
+    })
+    expect(preview.editStatus).toBe('editing')
+    expect(preview.downloadStatus).toBe('regenerating')
+    const messages = await teacher.query(api.prep.listPresentationMessages, {
+      presentationId,
+    })
+    expect(messages).toHaveLength(1)
+    expect(messages[0]).toMatchObject({
+      role: 'teacher',
+      body: 'Make slide 1 more discussion oriented.',
+    })
   })
 
   it('hides prep workspaces once their class is deleted', async () => {
