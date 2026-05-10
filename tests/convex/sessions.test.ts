@@ -339,6 +339,13 @@ describe('sessions auth and participant identity', () => {
       api.sessions.listActivitySubmissions,
       { sessionId },
     )
+    const ownSubmission = await student.query(
+      api.sessions.getMyPillarsSubmission,
+      { sessionId },
+    )
+    await expect(
+      teacher.query(api.sessions.getMyPillarsSubmission, { sessionId }),
+    ).rejects.toThrow('Only students can view their submission')
 
     expect(messages).toMatchObject([
       {
@@ -353,6 +360,14 @@ describe('sessions auth and participant identity', () => {
         type: 'pillars',
       },
     ])
+    expect(ownSubmission).toMatchObject({
+      displayName: 'Maya',
+      type: 'pillars',
+      payload: {
+        powerHolder: 'School board',
+        reflection: 'Start with the principal before escalating.',
+      },
+    })
   })
 
   it('validates structured Pillars v2 submissions', async () => {

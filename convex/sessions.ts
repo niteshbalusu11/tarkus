@@ -439,6 +439,38 @@ export const listActivitySubmissions = query({
   },
 })
 
+export const getMyPillarsSubmission = query({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    const access = await assertCanAccessSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    if (access.role !== 'student') {
+      throw new Error('Only students can view their submission')
+    }
+    const activity = await ctx.db
+      .query('activities')
+      .withIndex('by_sessionId_and_type', (q) =>
+        q.eq('sessionId', args.sessionId).eq('type', 'pillars'),
+      )
+      .first()
+    if (!activity) {
+      return null
+    }
+    return await ctx.db
+      .query('activitySubmissions')
+      .withIndex('by_activityId_and_studentTokenIdentifier', (q) =>
+        q
+          .eq('activityId', activity._id)
+          .eq('studentTokenIdentifier', identity.tokenIdentifier),
+      )
+      .unique()
+  },
+})
+
 export const submitPillarsExercise = mutation({
   args: {
     sessionId: v.id('sessions'),

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import {
   closestCenter,
@@ -49,7 +49,10 @@ import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
 import { api } from '../../../convex/_generated/api'
 import type { Doc, Id } from '../../../convex/_generated/dataModel'
-import { SCHOOL_UNIFORM_SCENARIO } from '../../lib/tarkus'
+import {
+  SCHOOL_UNIFORM_SCENARIO,
+  normalizePillarsPayload,
+} from '../../lib/tarkus'
 import type { PillarV2, PillarsPayloadV2 } from '../../lib/tarkus'
 
 export const Route = createFileRoute('/student/$sessionId')({
@@ -123,6 +126,12 @@ function StudentSession() {
   const messages = useQuery(api.sessions.listMessages, {
     sessionId: typedSessionId,
   })
+  const existingPillarsSubmission = useQuery(
+    api.sessions.getMyPillarsSubmission,
+    {
+      sessionId: typedSessionId,
+    },
+  )
   const publishedPresentation = useQuery(
     api.prep.getPublishedPresentationForStudentSession,
     { sessionId: typedSessionId },
@@ -140,6 +149,9 @@ function StudentSession() {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeMission, setActiveMission] = useState<MissionId>('holder')
+  const [hydratedSubmissionId, setHydratedSubmissionId] =
+    useState<Id<'activitySubmissions'> | null>(null)
+  const [isPillarsMinimized, setIsPillarsMinimized] = useState(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -247,6 +259,7 @@ function StudentSession() {
         payload,
       })
       setSubmitted(true)
+      setIsPillarsMinimized(true)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not submit')
     }
@@ -256,6 +269,44 @@ function StudentSession() {
     const config = activity?.config as { scenario?: string } | undefined
     return config?.scenario || SCHOOL_UNIFORM_SCENARIO
   }, [activity])
+
+  useEffect(() => {
+    if (
+      !existingPillarsSubmission ||
+      existingPillarsSubmission._id === hydratedSubmissionId
+    ) {
+      return
+    }
+
+    const normalized = normalizePillarsPayload(
+      existingPillarsSubmission.payload,
+    )
+    const hydratedPillars = normalized.pillars.map((pillar) => ({
+      id: pillar.id,
+      name: pillar.name,
+      accessibility: pillar.accessibility,
+      role: pillar.role,
+      notes: pillar.notes,
+    }))
+    const hydratedReasons: MoveReasons = {}
+    for (const move of normalized.moves) {
+      const pillarId =
+        move.pillarId ||
+        hydratedPillars.find((pillar) => pillar.name === move.pillarName)?.id
+      if (pillarId) {
+        hydratedReasons[pillarId] = move.why
+      }
+    }
+
+    setPowerHolder(normalized.powerHolder)
+    setPillars(hydratedPillars)
+    setMoveReasons(hydratedReasons)
+    setReflection(normalized.reflection)
+    setSubmitted(true)
+    setActiveMission('brief')
+    setIsPillarsMinimized(true)
+    setHydratedSubmissionId(existingPillarsSubmission._id)
+  }, [existingPillarsSubmission, hydratedSubmissionId])
 
   const missionSteps: Array<MissionStep> = [
     {
@@ -372,6 +423,8 @@ function StudentSession() {
               submitted={submitted}
               canSubmit={canSubmit}
               handleSubmit={handleSubmit}
+              isMinimized={isPillarsMinimized}
+              setIsMinimized={setIsPillarsMinimized}
             />
             <StudentSlidesCard presentation={publishedPresentation} />
           </aside>
@@ -544,6 +597,8 @@ function PillarsActivityWidget({
   submitted,
   canSubmit,
   handleSubmit,
+  isMinimized,
+  setIsMinimized,
 }: {
   missionSteps: Array<MissionStep>
   activeMission: MissionId
@@ -568,6 +623,8 @@ function PillarsActivityWidget({
   submitted: boolean
   canSubmit: boolean
   handleSubmit: () => void
+  isMinimized: boolean
+  setIsMinimized: (value: boolean) => void
 }) {
   const activeIndex = Math.max(
     0,
@@ -578,6 +635,49 @@ function PillarsActivityWidget({
   const nextStep =
     activeIndex < missionSteps.length - 1 ? missionSteps[activeIndex + 1] : null
   const completedCount = missionSteps.filter((step) => step.done).length
+
+  if (isMinimized) {
+    return (
+      <section className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.92)] p-4 shadow-[0_18px_60px_rgba(28,28,28,0.06)]">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
+              Pillars widget
+            </p>
+            <h2 className="mt-1 text-lg font-semibold text-foreground">
+              {submitted ? 'Pillars submitted' : 'Pillars minimized'}
+            </h2>
+            <p className="mt-1 text-sm leading-5 text-muted-foreground">
+              {submitted
+                ? `${pillars.length} pillars saved. You can reopen to revise.`
+                : 'Reopen when you are ready to continue.'}
+            </p>
+          </div>
+          {submitted ? (
+            <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-[var(--amber-deep)]" />
+          ) : (
+            <Circle className="mt-1 h-5 w-5 shrink-0 text-muted-foreground" />
+          )}
+        </div>
+        <div className="mt-3 flex items-center gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => setIsMinimized(false)}
+          >
+            {submitted ? 'Edit' : 'Reopen'}
+          </Button>
+          {submitted ? (
+            <Badge variant="secondary" className="h-7 gap-1.5 px-2.5">
+              <ClipboardCheck className="h-3.5 w-3.5" />
+              Saved
+            </Badge>
+          ) : null}
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.92)] p-4 shadow-[0_18px_60px_rgba(28,28,28,0.06)]">
@@ -598,6 +698,17 @@ function PillarsActivityWidget({
           {completedCount}/4
         </Badge>
       </div>
+      {submitted ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-3"
+          onClick={() => setIsMinimized(true)}
+        >
+          Minimize completed widget
+        </Button>
+      ) : null}
 
       <p className="mt-3 line-clamp-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-sm leading-6 text-muted-foreground">
         {scenario}
