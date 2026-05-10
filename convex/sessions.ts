@@ -1322,10 +1322,15 @@ export const getAnalysisInput = internalQuery({
       )
       .order('asc')
       .take(200)
-    const submissions = await ctx.db
-      .query('activitySubmissions')
-      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
-      .take(100)
+    const pillarsActivity = await getPillarsActivity(ctx, args.sessionId)
+    const submissions = pillarsActivity
+      ? await ctx.db
+          .query('activitySubmissions')
+          .withIndex('by_activityId', (q) =>
+            q.eq('activityId', pillarsActivity._id),
+          )
+          .take(100)
+      : []
     const participants = await ctx.db
       .query('sessionParticipants')
       .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
@@ -1626,6 +1631,8 @@ async function openRouterAnalysis(input: AnalysisInput) {
                 displayName: submission.displayName,
                 payload: submission.payload,
               })),
+              instructions:
+                'Analyze only the Pillars submissions provided above. Ignore intake forms. readiness.totalCount must equal pillarsSubmissions.length.',
             }),
           },
         ],

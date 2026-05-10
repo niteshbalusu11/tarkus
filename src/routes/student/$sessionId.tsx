@@ -258,7 +258,7 @@ function getStudentStatusMeta(status: SessionStatus) {
     case 'stopped':
       return {
         icon: Lock,
-        title: 'Teacher has stopped the class',
+        title: 'Teacher has paused the class',
         description:
           'Stay on this page. Work is paused until the teacher starts again.',
       }

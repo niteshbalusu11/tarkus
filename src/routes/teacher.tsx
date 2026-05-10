@@ -456,7 +456,7 @@ function getSessionStatusMeta(status: TeacherSession['status']) {
       }
     case 'stopped':
       return {
-        label: 'Stopped',
+        label: 'Paused',
         description: 'Students remain joined, but class work is paused.',
         className: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
       }
@@ -654,7 +654,7 @@ function SessionHeader({
                 onClick={onStop}
               >
                 <Pause className="h-4 w-4" />
-                Stop
+                Pause
               </Button>
             ) : null}
             {isPillarsLive ? (
@@ -773,11 +773,11 @@ function AiSummaryBar({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Badge className="border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.06]">
-            {currentSubmissionCount} submissions
+            {currentSubmissionCount} maps
           </Badge>
           {analyzedSubmissionCount !== undefined ? (
             <Badge className="border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.06]">
-              AI read {analyzedSubmissionCount}
+              AI read {analyzedSubmissionCount} maps
             </Badge>
           ) : null}
           {error ? (
@@ -812,7 +812,7 @@ function AiSummaryBar({
 
       {isStale ? (
         <p className="mt-3 text-sm font-medium text-amber-100">
-          AI has not read the newest submissions yet.
+          AI has not read the newest maps yet.
         </p>
       ) : null}
 
@@ -893,11 +893,11 @@ function AiInsightsDrawer({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <Badge className="border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.06]">
-              {currentSubmissionCount} submissions
+              {currentSubmissionCount} maps
             </Badge>
             {analyzedSubmissionCount !== undefined ? (
               <Badge className="border-white/10 bg-white/[0.06] text-slate-200 hover:bg-white/[0.06]">
-                AI read {analyzedSubmissionCount}
+                AI read {analyzedSubmissionCount} maps
               </Badge>
             ) : null}
             {readiness ? (
@@ -925,8 +925,8 @@ function AiInsightsDrawer({
           {isStale ? (
             <Alert className="mb-4 border-amber-200/20 bg-amber-200/10 text-amber-50">
               <AlertDescription>
-                AI was last refreshed at {analyzedSubmissionCount} submissions.
-                Refresh AI to include the newest maps.
+                AI was last refreshed at {analyzedSubmissionCount} maps. Refresh
+                AI to include the newest maps.
               </AlertDescription>
             </Alert>
           ) : null}

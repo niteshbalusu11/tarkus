@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { Activity, LogIn, Monitor, Users } from 'lucide-react'
+import { LogIn, Monitor, Users } from 'lucide-react'
 import ClerkHeader from '../integrations/clerk/header-user'
 import { Button } from './ui/button'
 
@@ -11,9 +11,12 @@ export default function Header() {
           to="/"
           className="flex items-center gap-2 text-sm font-semibold tracking-tight text-[var(--charcoal)] no-underline"
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--charcoal)] text-white">
-            <Activity className="h-4 w-4" />
-          </span>
+          <img
+            src="/favicon.svg"
+            alt=""
+            aria-hidden="true"
+            className="h-9 w-9 rounded-lg"
+          />
           <span className="text-base tracking-[0.14em] text-[var(--charcoal)]">
             TARKUS
           </span>
