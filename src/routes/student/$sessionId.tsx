@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { Dispatch, FormEvent, ReactNode, SetStateAction } from 'react'
+import type { Dispatch, FormEvent, SetStateAction } from 'react'
 import {
   closestCenter,
   DndContext,
@@ -21,16 +21,18 @@ import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery } from 'convex/react'
 import {
   AlertCircle,
+  ArrowRight,
   CheckCircle2,
   Circle,
+  ClipboardCheck,
   Clock,
   Download,
   GripVertical,
-  Landmark,
   Lock,
   MessageCircle,
   MonitorPlay,
   Plus,
+  Radio,
   Send,
   Sparkles,
   Trash2,
@@ -41,13 +43,6 @@ import AuthGate from '../../components/AuthGate'
 import { Alert, AlertDescription } from '../../components/ui/alert'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '../../components/ui/card'
 import { Checkbox } from '../../components/ui/checkbox'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
@@ -63,6 +58,15 @@ export const Route = createFileRoute('/student/$sessionId')({
 
 type MoveReasons = Partial<Record<string, string>>
 type SessionStatus = Doc<'sessions'>['status']
+type MissionId = 'holder' | 'map' | 'moves' | 'brief'
+
+type MissionStep = {
+  id: MissionId
+  label: string
+  title: string
+  description: string
+  done: boolean
+}
 
 function StudentRoute() {
   return (
@@ -135,6 +139,7 @@ function StudentSession() {
   const [reflection, setReflection] = useState('')
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [activeMission, setActiveMission] = useState<MissionId>('holder')
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -252,20 +257,37 @@ function StudentSession() {
     return config?.scenario || SCHOOL_UNIFORM_SCENARIO
   }, [activity])
 
-  const checklist = [
-    { label: 'Name the real power holder', done: Boolean(powerHolder.trim()) },
-    { label: 'Map at least three pillars', done: pillars.length >= 3 },
+  const missionSteps: Array<MissionStep> = [
     {
-      label: 'Order your first three moves',
-      done: firstMoves.length >= 3,
+      id: 'holder',
+      label: 'Power',
+      title: 'Name the power holder',
+      description: 'Identify who can actually change the policy.',
+      done: Boolean(powerHolder.trim()),
     },
     {
-      label: 'Explain why each move comes first',
+      id: 'map',
+      label: 'Map',
+      title: 'Build the support map',
+      description: 'Add the groups and institutions keeping policy in place.',
+      done: pillars.length >= 3,
+    },
+    {
+      id: 'moves',
+      label: 'Moves',
+      title: 'Rank first moves',
+      description: 'Choose where you would begin and explain why.',
       done:
         firstMoves.length >= 3 &&
         firstMoves.every((pillar) => moveReasons[pillar.id]?.trim()),
     },
-    { label: 'Submit a reflection', done: Boolean(reflection.trim()) },
+    {
+      id: 'brief',
+      label: 'Brief',
+      title: 'Send the briefing',
+      description: 'Summarize what changed in your analysis.',
+      done: Boolean(reflection.trim()),
+    },
   ]
 
   if (!sessionData) {
@@ -280,26 +302,27 @@ function StudentSession() {
   const StatusIcon = statusMeta.icon
 
   return (
-    <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-3 py-4">
-      <section className="mx-auto grid w-full max-w-7xl gap-4 xl:grid-cols-[1fr_340px]">
-        <div className="min-w-0 rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.82)] shadow-[0_24px_80px_rgba(28,28,28,0.08)]">
-          <div className="border-b border-[var(--line)] px-4 py-4 md:px-6">
-            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--amber-deep)]">
-                  Live exercise
-                </p>
-                <h1 className="mt-1 font-serif text-3xl font-semibold tracking-tight text-foreground">
-                  {sessionData.session.title || 'Pillars of Support'}
-                </h1>
+    <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-3 py-4 md:px-5">
+      <section className="mx-auto w-full max-w-6xl space-y-4">
+        <header className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.86)] p-4 shadow-[0_18px_60px_rgba(28,28,28,0.06)]">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="secondary" className="gap-1.5">
+                  <Radio className="h-3.5 w-3.5" />
+                  Live class
+                </Badge>
+                <Badge variant="outline" className="gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  {submitted ? 'Pillars submitted' : 'Pillars open'}
+                </Badge>
               </div>
-              <Badge variant="secondary" className="w-fit gap-1.5">
-                <Sparkles className="h-3.5 w-3.5" />
-                Structured checkpoint
-              </Badge>
+              <h1 className="mt-2 font-serif text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+                {sessionData.session.title || 'Pillars of Support'}
+              </h1>
             </div>
-            <div className="mt-4 flex items-start gap-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3">
-              <StatusIcon className="mt-0.5 h-4 w-4 text-[var(--amber-deep)]" />
+            <div className="flex max-w-md items-start gap-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3">
+              <StatusIcon className="mt-0.5 h-4 w-4 shrink-0 text-[var(--amber-deep)]" />
               <div>
                 <p className="text-sm font-semibold text-foreground">
                   {statusMeta.title}
@@ -310,130 +333,49 @@ function StudentSession() {
               </div>
             </div>
           </div>
+        </header>
 
-          <div className="grid gap-0 lg:grid-cols-[minmax(0,0.95fr)_minmax(360px,1.05fr)]">
-            <section className="border-b border-[var(--line)] p-4 lg:border-b-0 lg:border-r md:p-6">
-              <div className="flex items-center gap-2">
-                <MessageCircle className="h-4 w-4 text-[var(--amber-deep)]" />
-                <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Class chat
-                </h2>
-              </div>
-              <div className="mt-4 max-h-[52vh] min-h-[300px] space-y-3 overflow-y-auto rounded-xl border border-[var(--line)] bg-[#fffdf8] p-3">
-                {messages?.length ? (
-                  messages.slice(-80).map((chat, index) => (
-                    <motion.div
-                      key={chat._id}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: Math.min(index * 0.015, 0.12) }}
-                      className="rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3"
-                    >
-                      <p className="text-xs font-semibold text-muted-foreground">
-                        {chat.displayName || chat.authorRole}
-                      </p>
-                      <p className="mt-1 text-sm leading-6 text-foreground">
-                        {chat.body}
-                      </p>
-                    </motion.div>
-                  ))
-                ) : (
-                  <div className="flex h-full min-h-[260px] items-center justify-center text-center">
-                    <p className="max-w-xs text-sm leading-6 text-muted-foreground">
-                      Ask questions as the class runs. Your teacher sees the
-                      discussion and the structured exercise results.
-                    </p>
-                  </div>
-                )}
-              </div>
-              <form className="mt-4 space-y-3" onSubmit={handleSend}>
-                <Textarea
-                  className="min-h-24 resize-none"
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                  placeholder="Ask a question or say what is unclear..."
-                  disabled={!isClassActive}
-                />
-                <div className="flex items-center justify-between gap-3">
-                  <Label className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Checkbox
-                      checked={isAnonymous}
-                      disabled={!isClassActive}
-                      onCheckedChange={(checked) =>
-                        setIsAnonymous(checked === true)
-                      }
-                    />
-                    Anonymous
-                  </Label>
-                  <Button
-                    disabled={isSending || !isClassActive || !message.trim()}
-                    type="submit"
-                  >
-                    <Send className="h-4 w-4" />
-                    Send
-                  </Button>
-                </div>
-              </form>
-            </section>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_430px]">
+          <LiveClassThread
+            messages={messages}
+            message={message}
+            setMessage={setMessage}
+            isAnonymous={isAnonymous}
+            setIsAnonymous={setIsAnonymous}
+            isSending={isSending}
+            isClassActive={isClassActive}
+            handleSend={handleSend}
+          />
 
-            <section className="p-4 md:p-6">
-              <ExerciseTimeline
-                checklist={checklist}
-                scenario={scenario}
-                powerHolder={powerHolder}
-                setPowerHolder={setPowerHolder}
-                pillarName={pillarName}
-                setPillarName={setPillarName}
-                pillars={pillars}
-                moveReasons={moveReasons}
-                setMoveReasons={setMoveReasons}
-                updatePillar={updatePillar}
-                removePillar={removePillar}
-                addPillar={addPillar}
-                handleDragEnd={handleDragEnd}
-                sensors={sensors}
-                isClassActive={isClassActive}
-                reflection={reflection}
-                setReflection={setReflection}
-                error={error}
-                submitted={submitted}
-                canSubmit={canSubmit}
-                handleSubmit={handleSubmit}
-              />
-            </section>
-          </div>
+          <aside className="space-y-3 lg:sticky lg:top-4">
+            <PillarsActivityWidget
+              missionSteps={missionSteps}
+              activeMission={activeMission}
+              setActiveMission={setActiveMission}
+              scenario={scenario}
+              powerHolder={powerHolder}
+              setPowerHolder={setPowerHolder}
+              pillarName={pillarName}
+              setPillarName={setPillarName}
+              pillars={pillars}
+              moveReasons={moveReasons}
+              setMoveReasons={setMoveReasons}
+              updatePillar={updatePillar}
+              removePillar={removePillar}
+              addPillar={addPillar}
+              handleDragEnd={handleDragEnd}
+              sensors={sensors}
+              isClassActive={isClassActive}
+              reflection={reflection}
+              setReflection={setReflection}
+              error={error}
+              submitted={submitted}
+              canSubmit={canSubmit}
+              handleSubmit={handleSubmit}
+            />
+            <StudentSlidesCard presentation={publishedPresentation} />
+          </aside>
         </div>
-
-        <aside className="space-y-4">
-          <StudentSlidesCard presentation={publishedPresentation} />
-          <Card>
-            <CardHeader>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
-                Progress
-              </p>
-              <CardTitle className="font-serif text-2xl">
-                Exercise checklist
-              </CardTitle>
-              <CardDescription>
-                Complete each checkpoint before submitting.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {checklist.map((item) => (
-                <div key={item.label} className="flex items-start gap-3">
-                  {item.done ? (
-                    <CheckCircle2 className="mt-0.5 h-5 w-5 text-[var(--amber-deep)]" />
-                  ) : (
-                    <Circle className="mt-0.5 h-5 w-5 text-muted-foreground" />
-                  )}
-                  <span className="text-sm leading-6 text-foreground">
-                    {item.label}
-                  </span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </aside>
       </section>
     </main>
   )
@@ -455,46 +397,133 @@ function StudentSlidesCard({
   if (presentation === undefined) {
     return null
   }
+  if (!presentation) {
+    return null
+  }
 
   return (
-    <Card>
-      <CardHeader>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
-          Class slides
-        </p>
-        <CardTitle className="font-serif text-2xl">
-          {presentation ? 'Shared deck' : 'Slides not shared yet'}
-        </CardTitle>
-        <CardDescription>
-          {presentation
-            ? 'Your teacher has published the final slides for this class.'
-            : 'Your teacher will publish slides here when they are ready.'}
-        </CardDescription>
-      </CardHeader>
-      {presentation ? (
-        <CardContent className="space-y-2">
-          <Button asChild className="w-full">
+    <div className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.72)] p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--amber-deep)]">
+            Slides
+          </p>
+          <p className="truncate text-sm font-semibold text-foreground">
+            Shared deck
+          </p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button asChild size="icon-sm" variant="outline">
             <a href={`/presentation/${presentation._id}/view`} target="_blank">
               <MonitorPlay className="h-4 w-4" />
-              View slides
             </a>
           </Button>
           {presentation.downloadUrl ? (
-            <Button asChild className="w-full" variant="outline">
-              <a href={presentation.downloadUrl} download={presentation.fileName}>
+            <Button asChild size="icon-sm" variant="outline">
+              <a
+                href={presentation.downloadUrl}
+                download={presentation.fileName}
+              >
                 <Download className="h-4 w-4" />
-                Download
               </a>
             </Button>
           ) : null}
-        </CardContent>
-      ) : null}
-    </Card>
+        </div>
+      </div>
+    </div>
   )
 }
 
-function ExerciseTimeline({
-  checklist,
+function LiveClassThread({
+  messages,
+  message,
+  setMessage,
+  isAnonymous,
+  setIsAnonymous,
+  isSending,
+  isClassActive,
+  handleSend,
+}: {
+  messages: Array<Doc<'chatMessages'>> | undefined
+  message: string
+  setMessage: (value: string) => void
+  isAnonymous: boolean
+  setIsAnonymous: (value: boolean) => void
+  isSending: boolean
+  isClassActive: boolean
+  handleSend: (event: FormEvent<HTMLFormElement>) => void
+}) {
+  return (
+    <section className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.86)] p-3 shadow-[0_18px_60px_rgba(28,28,28,0.06)] md:p-4">
+      <div className="flex items-center gap-2">
+        <MessageCircle className="h-4 w-4 text-[var(--amber-deep)]" />
+        <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+          Class thread
+        </h2>
+      </div>
+
+      <div className="mt-4 h-[min(58vh,560px)] min-h-[360px] space-y-3 overflow-y-auto rounded-xl border border-[var(--line)] bg-[#fffdf8] p-3">
+        {messages?.length ? (
+          messages.slice(-80).map((chat, index) => (
+            <motion.div
+              key={chat._id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(index * 0.015, 0.12) }}
+              className="rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3"
+            >
+              <p className="text-xs font-semibold text-muted-foreground">
+                {chat.displayName || chat.authorRole}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-foreground">
+                {chat.body}
+              </p>
+            </motion.div>
+          ))
+        ) : (
+          <div className="flex h-full min-h-[230px] items-center justify-center text-center">
+            <p className="max-w-xs text-sm leading-6 text-muted-foreground">
+              Ask questions as the class runs. Use the Pillars widget beside the
+              thread when your teacher opens the exercise.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <form className="mt-4 space-y-3" onSubmit={handleSend}>
+        <Textarea
+          className="min-h-20 resize-none"
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          placeholder="Ask a question or say what is unclear..."
+          disabled={!isClassActive}
+        />
+        <div className="flex items-center justify-between gap-3">
+          <Label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Checkbox
+              checked={isAnonymous}
+              disabled={!isClassActive}
+              onCheckedChange={(checked) => setIsAnonymous(checked === true)}
+            />
+            Anonymous
+          </Label>
+          <Button
+            disabled={isSending || !isClassActive || !message.trim()}
+            type="submit"
+          >
+            <Send className="h-4 w-4" />
+            Send
+          </Button>
+        </div>
+      </form>
+    </section>
+  )
+}
+
+function PillarsActivityWidget({
+  missionSteps,
+  activeMission,
+  setActiveMission,
   scenario,
   powerHolder,
   setPowerHolder,
@@ -516,7 +545,9 @@ function ExerciseTimeline({
   canSubmit,
   handleSubmit,
 }: {
-  checklist: Array<{ label: string; done: boolean }>
+  missionSteps: Array<MissionStep>
+  activeMission: MissionId
+  setActiveMission: (mission: MissionId) => void
   scenario: string
   powerHolder: string
   setPowerHolder: (value: string) => void
@@ -538,210 +569,255 @@ function ExerciseTimeline({
   canSubmit: boolean
   handleSubmit: () => void
 }) {
-  const stepsDone = checklist.filter((item) => item.done).length
+  const activeIndex = Math.max(
+    0,
+    missionSteps.findIndex((step) => step.id === activeMission),
+  )
+  const activeStep = missionSteps[activeIndex]
+  const previousStep = activeIndex > 0 ? missionSteps[activeIndex - 1] : null
+  const nextStep =
+    activeIndex < missionSteps.length - 1 ? missionSteps[activeIndex + 1] : null
+  const completedCount = missionSteps.filter((step) => step.done).length
 
   return (
-    <div className="space-y-5">
-      <div className="rounded-xl border border-[var(--line)] bg-[var(--paper)] p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
-          Scenario
-        </p>
-        <p className="mt-2 text-sm leading-6 text-foreground">{scenario}</p>
-        <div className="mt-4 h-2 overflow-hidden rounded-full bg-[var(--paper-deep)]">
-          <motion.div
-            className="h-full bg-[var(--amber)]"
-            initial={{ width: 0 }}
-            animate={{ width: `${(stepsDone / checklist.length) * 100}%` }}
-          />
+    <section className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.92)] p-4 shadow-[0_18px_60px_rgba(28,28,28,0.06)]">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-deep)]">
+            Pillars widget
+          </p>
+          <h2 className="mt-1 text-lg font-semibold text-foreground">
+            {activeStep.title}
+          </h2>
         </div>
+        <Badge
+          variant={submitted ? 'default' : 'secondary'}
+          className="gap-1.5"
+        >
+          <ClipboardCheck className="h-3.5 w-3.5" />
+          {completedCount}/4
+        </Badge>
       </div>
 
-      <Checkpoint index="01" title="Who holds the power?">
-        <Label htmlFor="power-holder">
-          Name the person or institution that can actually change the policy.
-        </Label>
-        <Textarea
-          id="power-holder"
-          className="mt-2 min-h-20 resize-none"
-          value={powerHolder}
-          onChange={(event) => setPowerHolder(event.target.value)}
-          placeholder="Example: the principal, district office, or school board..."
-          disabled={!isClassActive}
-        />
-      </Checkpoint>
+      <p className="mt-3 line-clamp-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3 text-sm leading-6 text-muted-foreground">
+        {scenario}
+      </p>
 
-      <Checkpoint index="02" title="Build your pillars">
-        <p className="mb-3 text-sm leading-6 text-muted-foreground">
-          Add groups, institutions, or people keeping the policy in place. Drag
-          the pillars so the most strategic first move is at the top.
-        </p>
-        <div className="mb-4 flex gap-2">
-          <Input
-            value={pillarName}
-            onChange={(event) => setPillarName(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault()
-                addPillar()
-              }
-            }}
-            placeholder="Teachers, PTA, district office..."
-            disabled={!isClassActive}
-          />
-          <Button
-            size="icon"
+      <div className="mt-4 grid grid-cols-4 gap-1.5">
+        {missionSteps.map((step, index) => (
+          <button
+            key={step.id}
             type="button"
-            variant="outline"
-            disabled={
-              !isClassActive || !pillarName.trim() || pillars.length >= 10
-            }
-            onClick={addPillar}
+            onClick={() => setActiveMission(step.id)}
+            className={[
+              'h-10 rounded-lg border text-xs font-semibold transition',
+              activeMission === step.id
+                ? 'border-[var(--amber)] bg-[var(--amber-pale)]/55 text-foreground'
+                : step.done
+                  ? 'border-[var(--line)] bg-[#fffdf8] text-foreground'
+                  : 'border-[var(--line)] bg-[#fffdf8] text-muted-foreground hover:border-[var(--line-strong)]',
+            ].join(' ')}
           >
-            <Plus className="h-4 w-4" />
-          </Button>
-        </div>
+            {index + 1}. {step.label}
+          </button>
+        ))}
+      </div>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={pillars.map((pillar) => pillar.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-3">
-              {pillars.map((pillar, index) => (
-                <SortablePillarCard
-                  key={pillar.id}
-                  pillar={pillar}
-                  rank={index + 1}
-                  updatePillar={updatePillar}
-                  removePillar={removePillar}
-                  disabled={!isClassActive}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-
-        {!pillars.length ? (
-          <div className="rounded-xl border border-dashed border-[var(--line-strong)] bg-[#fffdf8] p-5 text-center text-sm text-muted-foreground">
-            Add your first pillar to start mapping the support structure.
+      <motion.div
+        key={activeMission}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.16 }}
+        className="mt-4"
+      >
+        {activeMission === 'holder' ? (
+          <div className="space-y-3">
+            <Label htmlFor="power-holder">
+              Who can actually change the policy?
+            </Label>
+            <Textarea
+              id="power-holder"
+              className="min-h-24 resize-none"
+              value={powerHolder}
+              onChange={(event) => setPowerHolder(event.target.value)}
+              placeholder="Principal, district office, school board..."
+              disabled={!isClassActive}
+            />
           </div>
         ) : null}
-      </Checkpoint>
 
-      <Checkpoint index="03" title="First, second, third moves">
-        <div className="grid gap-3">
-          {pillars.slice(0, 3).map((pillar, index) => (
-            <div
-              key={pillar.id}
-              className="rounded-xl border border-[var(--line)] bg-[#fffdf8] p-3"
-            >
-              <div className="flex items-center gap-3">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--charcoal)] text-sm font-semibold text-white">
-                  {index + 1}
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {pillar.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Accessibility {pillar.accessibility}/5
-                  </p>
-                </div>
-              </div>
-              <Textarea
-                className="mt-3 min-h-20 resize-none"
-                value={moveReasons[pillar.id] || ''}
-                onChange={(event) =>
-                  setMoveReasons((current) => ({
-                    ...current,
-                    [pillar.id]: event.target.value,
-                  }))
-                }
-                placeholder="Why approach this pillar at this point?"
+        {activeMission === 'map' ? (
+          <div className="space-y-3">
+            <div className="flex gap-2">
+              <Input
+                value={pillarName}
+                onChange={(event) => setPillarName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    addPillar()
+                  }
+                }}
+                placeholder="Add a pillar..."
                 disabled={!isClassActive}
               />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                disabled={
+                  !isClassActive || !pillarName.trim() || pillars.length >= 10
+                }
+                onClick={addPillar}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
             </div>
-          ))}
-          {pillars.length < 3 ? (
-            <p className="rounded-xl border border-dashed border-[var(--line-strong)] bg-[#fffdf8] p-4 text-sm text-muted-foreground">
-              Add at least three pillars above, then drag them into the order
-              you would approach them.
-            </p>
-          ) : null}
-        </div>
-      </Checkpoint>
 
-      <Checkpoint index="04" title="Reflection">
-        <Label htmlFor="reflection">
-          What changed when you ranked accessibility instead of only formal
-          power?
-        </Label>
-        <Textarea
-          id="reflection"
-          className="mt-2 min-h-24 resize-none"
-          value={reflection}
-          onChange={(event) => setReflection(event.target.value)}
-          placeholder="Example: I first thought the school board mattered most, but teachers are easier to reach..."
-          disabled={!isClassActive}
-        />
-      </Checkpoint>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={pillars.map((pillar) => pillar.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                  {pillars.map((pillar, index) => (
+                    <CompactPillarRow
+                      key={pillar.id}
+                      pillar={pillar}
+                      rank={index + 1}
+                      updatePillar={updatePillar}
+                      removePillar={removePillar}
+                      disabled={!isClassActive}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
 
-      {error ? (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
-      {submitted ? (
-        <Alert>
-          <AlertDescription>
-            Submitted. You can keep editing and submit again if your thinking
-            changes.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+            {!pillars.length ? (
+              <div className="rounded-xl border border-dashed border-[var(--line-strong)] bg-[#fffdf8] p-4 text-center text-sm text-muted-foreground">
+                Add at least three pillars.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
-      <Button
-        className="h-11 w-full"
-        disabled={!isClassActive || !canSubmit}
-        onClick={handleSubmit}
-      >
-        Submit pillars exercise
-      </Button>
+        {activeMission === 'moves' ? (
+          <div className="space-y-3">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={pillars.map((pillar) => pillar.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                  {pillars.map((pillar, index) => (
+                    <SortableMoveRow
+                      key={pillar.id}
+                      pillar={pillar}
+                      rank={index + 1}
+                      moveReason={moveReasons[pillar.id] || ''}
+                      setMoveReasons={setMoveReasons}
+                      disabled={!isClassActive}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+            {pillars.length < 3 ? (
+              <div className="rounded-xl border border-dashed border-[var(--line-strong)] bg-[#fffdf8] p-4 text-sm text-muted-foreground">
+                Add three pillars before ranking first moves.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {activeMission === 'brief' ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <MiniFact label="Power" value={powerHolder || 'Missing'} />
+              <MiniFact label="Pillars" value={String(pillars.length)} />
+              <MiniFact label="First" value={pillars[0]?.name || 'Missing'} />
+            </div>
+            <Label htmlFor="reflection">
+              What changed when you ranked accessibility?
+            </Label>
+            <Textarea
+              id="reflection"
+              className="min-h-28 resize-none"
+              value={reflection}
+              onChange={(event) => setReflection(event.target.value)}
+              placeholder="I first thought..., but..."
+              disabled={!isClassActive}
+            />
+            {error ? (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            ) : null}
+            {submitted ? (
+              <Alert>
+                <AlertDescription>
+                  Submitted. You can edit and resubmit.
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <Button
+              className="h-10 w-full"
+              disabled={!isClassActive || !canSubmit}
+              onClick={handleSubmit}
+            >
+              Submit
+            </Button>
+          </div>
+        ) : null}
+      </motion.div>
+
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-[var(--line)] pt-3">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={!previousStep}
+          onClick={() => previousStep && setActiveMission(previousStep.id)}
+        >
+          Back
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          disabled={!nextStep}
+          onClick={() => nextStep && setActiveMission(nextStep.id)}
+        >
+          Next
+          <ArrowRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+function MiniFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-[var(--line)] bg-[#fffdf8] p-2">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 truncate text-sm font-semibold text-foreground">
+        {value}
+      </p>
     </div>
   )
 }
 
-function Checkpoint({
-  index,
-  title,
-  children,
-}: {
-  index: string
-  title: string
-  children: ReactNode
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-[var(--line)] bg-[rgba(255,253,248,0.9)] p-4"
-    >
-      <div className="mb-3 flex items-center gap-3">
-        <span className="font-serif text-lg font-semibold text-[var(--amber-deep)]">
-          {index}
-        </span>
-        <h3 className="text-base font-semibold text-foreground">{title}</h3>
-      </div>
-      {children}
-    </motion.div>
-  )
-}
-
-function SortablePillarCard({
+function CompactPillarRow({
   pillar,
   rank,
   updatePillar,
@@ -772,17 +848,124 @@ function SortablePillarCard({
       ref={setNodeRef}
       style={style}
       className={[
-        'grid gap-3 rounded-xl border bg-[#fffdf8] p-3 shadow-sm md:grid-cols-[88px_1fr]',
-        isDragging ? 'border-[var(--amber)] shadow-xl' : 'border-[var(--line)]',
+        'rounded-xl border bg-[#fffdf8] p-2 shadow-sm',
+        isDragging ? 'border-[var(--amber)] shadow-lg' : 'border-[var(--line)]',
       ].join(' ')}
     >
-      <div className="flex items-center justify-between gap-2 md:block">
-        <PillarIllustration rank={rank} />
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--paper-deep)] text-xs font-semibold text-foreground">
+          {rank}
+        </span>
+        <Input
+          value={pillar.name}
+          onChange={(event) =>
+            updatePillar(pillar.id, { name: event.target.value })
+          }
+          className="h-8 font-semibold"
+          disabled={disabled}
+        />
         <Button
           type="button"
           variant="ghost"
           size="icon-sm"
-          className="md:mt-2"
+          disabled={disabled}
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          disabled={disabled}
+          onClick={() => removePillar(pillar.id)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="mt-2 grid gap-2">
+        <ReachControl
+          value={pillar.accessibility}
+          onChange={(accessibility) =>
+            updatePillar(pillar.id, { accessibility })
+          }
+          disabled={disabled}
+          compact
+        />
+        <Input
+          value={pillar.role || ''}
+          onChange={(event) =>
+            updatePillar(pillar.id, { role: event.target.value })
+          }
+          className="h-8"
+          placeholder="What support do they provide?"
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  )
+}
+
+function SortableMoveRow({
+  pillar,
+  rank,
+  moveReason,
+  setMoveReasons,
+  disabled,
+}: {
+  pillar: PillarV2
+  rank: number
+  moveReason: string
+  setMoveReasons: Dispatch<SetStateAction<MoveReasons>>
+  disabled: boolean
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: pillar.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+  const isFirstMove = rank <= 3
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={[
+        'rounded-xl border bg-[#fffdf8] p-3 shadow-sm',
+        isDragging ? 'border-[var(--amber)] shadow-xl' : 'border-[var(--line)]',
+      ].join(' ')}
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className={[
+            'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-semibold',
+            isFirstMove
+              ? 'bg-[var(--charcoal)] text-white'
+              : 'bg-[var(--paper-deep)] text-foreground',
+          ].join(' ')}
+        >
+          {rank}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">
+            {pillar.name}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Accessibility {pillar.accessibility}/5
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
           disabled={disabled}
           {...attributes}
           {...listeners}
@@ -790,88 +973,79 @@ function SortablePillarCard({
           <GripVertical className="h-4 w-4" />
         </Button>
       </div>
-      <div className="space-y-3">
-        <div className="flex items-start gap-2">
-          <Input
-            value={pillar.name}
-            onChange={(event) =>
-              updatePillar(pillar.id, { name: event.target.value })
-            }
-            className="font-semibold"
-            disabled={disabled}
-          />
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            disabled={disabled}
-            onClick={() => removePillar(pillar.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
-        <Rating
-          value={pillar.accessibility}
-          onChange={(accessibility) =>
-            updatePillar(pillar.id, { accessibility })
-          }
-          disabled={disabled}
-        />
-        <Input
-          value={pillar.role || ''}
+      {isFirstMove ? (
+        <Textarea
+          className="mt-3 min-h-20 resize-none"
+          value={moveReason}
           onChange={(event) =>
-            updatePillar(pillar.id, { role: event.target.value })
+            setMoveReasons((current) => ({
+              ...current,
+              [pillar.id]: event.target.value,
+            }))
           }
-          placeholder="What role does this pillar play?"
+          placeholder="Why approach this pillar at this point?"
           disabled={disabled}
         />
-      </div>
+      ) : null}
     </div>
   )
 }
 
-function PillarIllustration({ rank }: { rank: number }) {
-  return (
-    <div className="relative flex h-20 w-20 shrink-0 items-end justify-center rounded-xl bg-[var(--paper-deep)]">
-      <Landmark className="absolute top-2 h-5 w-5 text-[var(--sepia)]" />
-      <div className="mb-2 h-10 w-10 rounded-t-lg border-x-4 border-t-4 border-[var(--sepia)] bg-[linear-gradient(90deg,#d9bd78_0_18%,#f1ddaa_18%_36%,#d9bd78_36%_54%,#f1ddaa_54%_72%,#d9bd78_72%_100%)]" />
-      <span className="absolute bottom-2 right-2 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--charcoal)] text-[10px] font-semibold text-white">
-        {rank}
-      </span>
-    </div>
-  )
-}
-
-function Rating({
+function ReachControl({
   value,
   onChange,
   disabled,
+  compact = false,
 }: {
   value: number
   onChange: (value: number) => void
   disabled: boolean
+  compact?: boolean
 }) {
   return (
     <div>
-      <div className="mb-2 flex items-center justify-between">
+      <div
+        className={
+          compact
+            ? 'mb-1 flex items-center justify-between'
+            : 'mb-2 flex items-center justify-between'
+        }
+      >
         <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           Accessibility
         </span>
         <span className="text-sm font-semibold text-foreground">{value}/5</span>
       </div>
-      <input
-        type="range"
-        min={1}
-        max={5}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full accent-[var(--amber)]"
-        disabled={disabled}
-      />
-      <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
-        <span>Hard</span>
-        <span>Easy</span>
+      <div
+        className={
+          compact ? 'grid grid-cols-5 gap-1' : 'grid grid-cols-5 gap-1.5'
+        }
+      >
+        {[1, 2, 3, 4, 5].map((score) => (
+          <button
+            key={score}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(score)}
+            className={[
+              compact
+                ? 'h-7 rounded-md border text-xs font-semibold transition disabled:opacity-60'
+                : 'h-9 rounded-lg border text-xs font-semibold transition disabled:opacity-60',
+              value === score
+                ? 'border-[var(--charcoal)] bg-[var(--charcoal)] text-white'
+                : 'border-[var(--line)] bg-[var(--paper)] text-foreground hover:border-[var(--line-strong)]',
+            ].join(' ')}
+          >
+            {score}
+          </button>
+        ))}
       </div>
+      {!compact ? (
+        <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
+          <span>Hard</span>
+          <span>Reachable</span>
+        </div>
+      ) : null}
     </div>
   )
 }
