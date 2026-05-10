@@ -660,7 +660,7 @@ function SessionHeader({
             {isPillarsLive ? (
               <Badge className="h-10 gap-1.5 rounded-md bg-[var(--charcoal)] px-3 text-white">
                 <Flag className="h-4 w-4" />
-                Pillars live
+                Exercise live
               </Badge>
             ) : status !== 'ended' ? (
               <Button
@@ -669,7 +669,7 @@ function SessionHeader({
                 onClick={onBeginPillars}
               >
                 <Flag className="h-4 w-4" />
-                Begin Pillars
+                Begin exercise
               </Button>
             ) : null}
             {canEnd ? (
