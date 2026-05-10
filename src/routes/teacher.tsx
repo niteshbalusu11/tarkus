@@ -281,16 +281,18 @@ function TeacherDashboard() {
               onDelete={handleDelete}
               onPrep={handlePrepClass}
             />
-            <div className="grid items-start gap-5 2xl:grid-cols-[330px_minmax(420px,1fr)_320px]">
-              <AiPanel
-                analysis={analysis}
-                error={latestAnalysis?.error}
-                analyzedSubmissionCount={
-                  latestAnalysis?.inputCursor.submissionCount
-                }
-                currentSubmissionCount={submissions?.length || 0}
-              />
-              <PillarsPanel submissions={submissions || []} />
+            <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+              <div className="min-w-0 space-y-5">
+                <AiPanel
+                  analysis={analysis}
+                  error={latestAnalysis?.error}
+                  analyzedSubmissionCount={
+                    latestAnalysis?.inputCursor.submissionCount
+                  }
+                  currentSubmissionCount={submissions?.length || 0}
+                />
+                <PillarsPanel submissions={submissions || []} />
+              </div>
               <LiveSidePanel
                 participants={participants || []}
                 messages={messages || []}
@@ -550,7 +552,7 @@ function SessionHeader({
           </div>
         </div>
 
-        <div className="flex flex-col justify-between gap-4 p-5">
+        <div className="flex flex-col gap-4 p-5">
           <div className="grid gap-3 sm:grid-cols-2">
             <Stat icon={<Users />} label="joined" value={participantCount} />
             <Stat
@@ -651,19 +653,33 @@ function AiPanel({
     currentSubmissionCount > analyzedSubmissionCount
 
   return (
-    <Card className="h-fit border-slate-800 bg-slate-950 text-white shadow-[0_20px_50px_rgba(4,7,18,0.18)]">
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-200">
-            Teacher-only AI
-          </p>
-          <CardTitle className="mt-1 font-serif text-2xl">
-            Class synthesis
-          </CardTitle>
+    <section className="overflow-hidden rounded-3xl border border-[#151927] bg-[#080b16] text-white shadow-[0_24px_70px_rgba(4,7,18,0.22)]">
+      <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-teal-200 text-slate-950">
+            <Bot className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-200">
+              Teacher-only AI
+            </p>
+            <h2 className="font-serif text-2xl leading-tight text-white">
+              Class synthesis
+            </h2>
+          </div>
         </div>
-        <Bot className="h-6 w-6 text-teal-200" />
-      </CardHeader>
-      <CardContent>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+            {currentSubmissionCount} submissions
+          </span>
+          {analyzedSubmissionCount !== undefined ? (
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5">
+              AI read {analyzedSubmissionCount}
+            </span>
+          ) : null}
+        </div>
+      </div>
+      <div className="p-5">
         {error ? (
           <Alert className="mb-4 border-amber-300/20 bg-amber-300/10 text-amber-100">
             <AlertDescription>
@@ -681,115 +697,133 @@ function AiPanel({
         ) : null}
 
         {!analysis ? (
-          <p className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-sm leading-6 text-slate-300">
-            Seed demo data or wait for student activity, then refresh AI for a
-            concise class brief.
-          </p>
+          <div className="grid min-h-40 place-items-center rounded-2xl border border-dashed border-white/15 bg-white/[0.035] p-6 text-center">
+            <div>
+              <p className="font-serif text-2xl text-white">
+                Waiting for class signal.
+              </p>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-300">
+                Seed demo data or wait for student activity, then refresh AI for
+                a concise class brief.
+              </p>
+            </div>
+          </div>
         ) : (
-          <div className="space-y-4">
-            {analysis.readiness ? (
-              <div className="rounded-xl border border-white/10 bg-white/[0.06] p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-200">
-                  Readiness
-                </p>
-                <div className="mt-3 flex flex-wrap items-end gap-3">
-                  <p className="font-serif text-4xl font-semibold text-white">
+          <div className="grid gap-5 xl:grid-cols-[270px_minmax(0,1fr)]">
+            <aside className="space-y-4">
+              {analysis.readiness ? (
+                <div className="rounded-2xl border border-teal-200/20 bg-teal-200/[0.08] p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-200">
+                    Readiness
+                  </p>
+                  <p className="mt-3 font-serif text-5xl font-semibold text-white">
                     {analysis.readiness.readyCount}/
                     {analysis.readiness.totalCount}
                   </p>
-                  <Badge className="mb-1 bg-teal-200 text-slate-950 hover:bg-teal-200">
+                  <Badge className="mt-3 bg-teal-200 text-slate-950 hover:bg-teal-200">
                     {analysis.readiness.recommendation.replaceAll('_', ' ')}
                   </Badge>
                 </div>
-              </div>
-            ) : null}
-            <InsightList title="Teacher brief" items={analysis.teacherBrief} />
-            <div className="grid gap-3 md:grid-cols-2">
-              <InsightList
-                title="Recurring questions"
-                items={analysis.recurringQuestions}
-              />
-              <InsightList
-                title="Unclear concepts"
-                items={analysis.unclearConcepts}
-              />
-            </div>
-            {analysis.commonErrors.length ? (
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+              ) : null}
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Rubric flags
+                  Emotional tone
+                </p>
+                <p className="mt-2 text-lg font-semibold text-white">
+                  {analysis.emotionalTone.label || 'No signal yet'}
+                </p>
+                <p className="mt-1 text-sm leading-6 text-slate-300">
+                  {analysis.emotionalTone.explanation ||
+                    'More class activity is needed.'}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Chat clusters
                 </p>
                 <div className="mt-3 space-y-2">
-                  {analysis.commonErrors.slice(0, 4).map((flag) => (
-                    <div
-                      key={flag.code}
-                      className="flex items-center justify-between gap-3 text-sm"
-                    >
-                      <span className="text-slate-200">
-                        {flag.code}: {flag.label}
-                      </span>
-                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-teal-100">
-                        {flag.count}
-                      </span>
-                    </div>
-                  ))}
+                  {analysis.chatClusters.length ? (
+                    analysis.chatClusters.map((cluster) => (
+                      <div
+                        key={cluster.label}
+                        className="flex items-center justify-between gap-3 text-sm"
+                      >
+                        <span className="text-slate-200">{cluster.label}</span>
+                        <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-teal-100">
+                          {cluster.count || 0}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-400">
+                      Waiting for signal.
+                    </p>
+                  )}
                 </div>
               </div>
-            ) : null}
-            {analysis.collectiveBlindSpot ? (
-              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  Collective blind spot
-                </p>
-                <p className="mt-2 text-sm leading-6 text-slate-200">
-                  {analysis.collectiveBlindSpot}
-                </p>
+            </aside>
+
+            <div className="space-y-4">
+              <InsightList title="Teacher brief" items={analysis.teacherBrief} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <InsightList
+                  title="Recurring questions"
+                  items={analysis.recurringQuestions}
+                />
+                <InsightList
+                  title="Unclear concepts"
+                  items={analysis.unclearConcepts}
+                />
               </div>
-            ) : null}
-            {analysis.trainerDebriefPrompt ? (
-              <div className="rounded-xl border border-amber-200/20 bg-amber-200/10 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-100">
-                  Debrief prompt
-                </p>
-                <p className="mt-2 text-sm leading-6 text-amber-50">
-                  {analysis.trainerDebriefPrompt}
-                </p>
-              </div>
-            ) : null}
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Emotional tone
-              </p>
-              <p className="mt-2 text-lg font-semibold text-white">
-                {analysis.emotionalTone.label || 'No signal yet'}
-              </p>
-              <p className="mt-1 text-sm leading-6 text-slate-300">
-                {analysis.emotionalTone.explanation ||
-                  'More class activity is needed.'}
-              </p>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
-                Chat clusters
-              </p>
-              <div className="mt-3 space-y-2">
-                {analysis.chatClusters.map((cluster) => (
-                  <div
-                    key={cluster.label}
-                    className="flex items-center justify-between gap-3 text-sm"
-                  >
-                    <span className="text-slate-200">{cluster.label}</span>
-                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-teal-100">
-                      {cluster.count || 0}
-                    </span>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {analysis.commonErrors.length ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      Rubric flags
+                    </p>
+                    <div className="mt-3 space-y-2">
+                      {analysis.commonErrors.slice(0, 4).map((flag) => (
+                        <div
+                          key={flag.code}
+                          className="flex items-center justify-between gap-3 text-sm"
+                        >
+                          <span className="text-slate-200">
+                            {flag.code}: {flag.label}
+                          </span>
+                          <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-teal-100">
+                            {flag.count}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
+                ) : null}
+                {analysis.collectiveBlindSpot ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      Collective blind spot
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-slate-200">
+                      {analysis.collectiveBlindSpot}
+                    </p>
+                  </div>
+                ) : null}
               </div>
+              {analysis.trainerDebriefPrompt ? (
+                <div className="rounded-2xl border border-amber-200/20 bg-amber-200/10 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-100">
+                    Debrief prompt
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-amber-50">
+                    {analysis.trainerDebriefPrompt}
+                  </p>
+                </div>
+              ) : null}
             </div>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 
@@ -801,7 +835,7 @@ function InsightList({
   items: Array<string>
 }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
         {title}
       </p>
