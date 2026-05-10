@@ -254,9 +254,9 @@ function PrepWorkspace() {
   }
 
   return (
-    <main className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
-      <section className="rounded-[1.75rem] border border-[var(--line)] bg-[var(--surface-strong)] p-6 shadow-[0_24px_70px_rgba(28,28,28,0.08)]">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+    <main className="mx-auto flex w-full max-w-[1640px] flex-col gap-5 px-4 py-5 md:px-6">
+      <section className="border-b border-[var(--line)] pb-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <Badge
               variant="outline"
@@ -265,15 +265,15 @@ function PrepWorkspace() {
               <Sparkles className="h-3 w-3" />
               AI curriculum builder
             </Badge>
-            <h1 className="mt-4 font-serif text-4xl leading-tight text-[var(--charcoal)] md:text-6xl">
+            <h1 className="mt-3 font-serif text-4xl leading-tight text-[var(--charcoal)] md:text-5xl">
               {workspace.title}
             </h1>
-            <p className="mt-3 max-w-3xl text-base leading-7 text-[var(--charcoal-soft)]">
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[var(--charcoal-soft)]">
               Upload source material, generate a teacher-editable curriculum,
               refine the plan with the agent, then export slides for class.
             </p>
           </div>
-          <div className="space-y-3 lg:w-[560px]">
+          <div className="space-y-3 lg:w-[520px]">
             <div className="grid gap-2 sm:grid-cols-3">
               <StatusTile label="Documents" value={`${documents?.length || 0}`} />
               <StatusTile label="Extracted" value={`${extractedCount}`} />
@@ -304,18 +304,15 @@ function PrepWorkspace() {
         </Alert>
       ) : null}
 
-      <section className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)_360px]">
-        <aside className="space-y-4">
-          <Card className="border-[var(--line)] bg-[#fffefa]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-[var(--amber-deep)]" />
-                Class focus
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+      <section className="grid items-start gap-5 xl:grid-cols-[300px_minmax(0,1fr)_330px]">
+        <aside className="sticky top-24 h-fit rounded-3xl border border-[var(--line)] bg-[rgba(255,253,248,0.74)] p-4">
+          <section className="space-y-3 border-b border-[var(--line)] pb-5">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-[var(--charcoal)]">
+              <Sparkles className="h-4 w-4 text-[var(--amber-deep)]" />
+              Class focus
+            </h2>
               <Textarea
-                className="min-h-40"
+                className="min-h-36 bg-[#fffefa]"
                 value={prepBrief}
                 onChange={(event) => setPrepBrief(event.target.value)}
               />
@@ -332,16 +329,13 @@ function PrepWorkspace() {
                 )}
                 Save focus
               </Button>
-            </CardContent>
-          </Card>
-          <Card className="border-[var(--line)] bg-[#fffefa]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5 text-[var(--amber-deep)]" />
-                Source documents
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          </section>
+
+          <section className="space-y-4 border-b border-[var(--line)] py-5">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-[var(--charcoal)]">
+              <Upload className="h-4 w-4 text-[var(--amber-deep)]" />
+              Source documents
+            </h2>
               <input
                 ref={fileInputRef}
                 className="hidden"
@@ -387,8 +381,7 @@ function PrepWorkspace() {
                 )}
                 Generate curriculum
               </Button>
-            </CardContent>
-          </Card>
+          </section>
 
           <PresentationPanel
             busy={busy}
@@ -417,7 +410,7 @@ function PrepWorkspace() {
           }
         />
 
-        <aside className="space-y-4">
+        <aside className="sticky top-24 space-y-4">
           <Card className="border-[var(--line)] bg-[#171614] text-white shadow-[0_24px_70px_rgba(28,28,28,0.12)]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-white">
@@ -489,11 +482,11 @@ function PrepWorkspace() {
 
 function StatusTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.72)] p-4">
-      <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--amber-deep)]">
+    <div className="rounded-xl bg-[rgba(255,253,248,0.72)] px-3 py-2">
+      <p className="text-[0.65rem] font-bold uppercase tracking-[0.18em] text-[var(--amber-deep)]">
         {label}
       </p>
-      <p className="mt-2 truncate text-xl font-bold capitalize text-[var(--charcoal)]">
+      <p className="mt-1 truncate text-lg font-bold capitalize text-[var(--charcoal)]">
         {value}
       </p>
     </div>
@@ -513,7 +506,7 @@ function DocumentList({
 }) {
   if (!documents.length) {
     return (
-      <div className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--paper)] p-4 text-sm leading-6 text-[var(--charcoal-muted)]">
+      <div className="rounded-xl border border-dashed border-[var(--line-strong)] bg-[var(--paper)] p-3 text-sm leading-6 text-[var(--charcoal-muted)]">
         Upload source files for the curriculum agent or images for the slide deck.
       </div>
     )
@@ -523,7 +516,7 @@ function DocumentList({
       {documents.map((document) => (
         <div
           key={document._id}
-          className="rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3"
+          className="rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3"
         >
           <div className="flex items-start gap-3">
             {document.kind === 'image' || document.mimeType.startsWith('image/') ? (
@@ -607,7 +600,7 @@ function CurriculumWorkspace({
   }
 
   return (
-    <Card className="overflow-hidden border-[var(--line)] bg-[#fffefa] shadow-[0_24px_70px_rgba(28,28,28,0.08)]">
+    <section className="overflow-hidden rounded-3xl border border-[var(--line)] bg-[#fffefa] shadow-[0_24px_70px_rgba(28,28,28,0.07)]">
       <div className="border-b border-[var(--line)] bg-[linear-gradient(135deg,#fffdf8_0%,#f4efe4_100%)] p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -617,7 +610,7 @@ function CurriculumWorkspace({
             >
               Version {curriculum.version}
             </Badge>
-            <h2 className="mt-4 font-serif text-4xl leading-tight text-[var(--charcoal)] md:text-5xl">
+            <h2 className="mt-4 max-w-4xl font-serif text-3xl leading-tight text-[var(--charcoal)] md:text-4xl">
               {draft.title}
             </h2>
             <p className="mt-3 text-base leading-7 text-[var(--charcoal-soft)]">
@@ -664,7 +657,7 @@ function CurriculumWorkspace({
           </TabsContent>
         </Tabs>
       </CardContent>
-    </Card>
+    </section>
   )
 }
 
@@ -674,74 +667,80 @@ function CurriculumReadView({
   curriculum: CurriculumContent
 }) {
   return (
-    <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_260px]">
+    <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_310px]">
       <div className="p-6">
-        <section>
+        <section className="grid gap-5 md:grid-cols-[160px_minmax(0,1fr)]">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--amber-deep)]">
             Learning objectives
           </p>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <ol className="space-y-3">
             {curriculum.learningObjectives.map((objective, index) => (
-              <div
+              <li
                 key={`${objective}-${index}`}
-                className="rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-4 text-sm font-semibold leading-6 text-[var(--charcoal)]"
+                className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-3 border-b border-[var(--line)] pb-3 last:border-0"
               >
-                <span className="mb-3 block text-xs font-bold text-[var(--amber-deep)]">
+                <span className="font-mono text-xs font-bold text-[var(--amber-deep)]">
                   {String(index + 1).padStart(2, '0')}
                 </span>
-                {objective}
-              </div>
+                <span className="text-base font-semibold leading-7 text-[var(--charcoal)]">
+                  {objective}
+                </span>
+              </li>
             ))}
-          </div>
+          </ol>
         </section>
 
         <section className="mt-8">
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--amber-deep)]">
             Agenda
           </p>
-          <div className="mt-4 space-y-4">
+          <div className="mt-4 divide-y divide-[var(--line)] border-y border-[var(--line)]">
             {curriculum.agenda.map((section, index) => (
               <div
                 key={`${section.title}-${index}`}
-                className="rounded-3xl border border-[var(--line)] bg-[#fffdf8] p-5 shadow-[0_10px_26px_rgba(28,28,28,0.04)]"
+                className="grid gap-4 py-5 md:grid-cols-[92px_minmax(0,1fr)]"
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--amber-deep)]">
-                      {String(index + 1).padStart(2, '0')} ·{' '}
-                      {section.durationMinutes} min
-                    </p>
-                    <h3 className="mt-2 text-2xl font-bold text-[var(--charcoal)]">
+                <div>
+                  <p className="font-mono text-sm font-bold text-[var(--amber-deep)]">
+                    {String(index + 1).padStart(2, '0')}
+                  </p>
+                  <p className="mt-1 text-xs font-bold uppercase tracking-[0.14em] text-[var(--charcoal-muted)]">
+                    {section.durationMinutes} min
+                  </p>
+                </div>
+                <div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <h3 className="text-2xl font-bold text-[var(--charcoal)]">
                       {section.title}
                     </h3>
+                    {section.activity ? (
+                      <Badge className="w-fit bg-[var(--charcoal)] text-white">
+                        Activity
+                      </Badge>
+                    ) : null}
                   </div>
+                  <p className="mt-3 leading-7 text-[var(--charcoal-soft)]">
+                    {section.teachingNotes}
+                  </p>
                   {section.activity ? (
-                    <Badge className="bg-[var(--charcoal)] text-white">
-                      Activity
-                    </Badge>
+                    <div className="mt-4 rounded-2xl border border-[rgba(201,146,26,0.28)] bg-[rgba(242,223,173,0.25)] p-4 text-sm font-semibold leading-6 text-[var(--sepia)]">
+                      {section.activity}
+                    </div>
+                  ) : null}
+                  {section.discussionPrompts.length ? (
+                    <ul className="mt-4 grid gap-2 sm:grid-cols-2">
+                      {section.discussionPrompts.map((prompt, promptIndex) => (
+                        <li
+                          key={`${prompt}-${promptIndex}`}
+                          className="flex gap-2 text-sm leading-6 text-[var(--charcoal)]"
+                        >
+                          <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--amber)]" />
+                          {prompt}
+                        </li>
+                      ))}
+                    </ul>
                   ) : null}
                 </div>
-                <p className="mt-4 leading-7 text-[var(--charcoal-soft)]">
-                  {section.teachingNotes}
-                </p>
-                {section.activity ? (
-                  <div className="mt-4 rounded-2xl border border-[rgba(201,146,26,0.28)] bg-[rgba(242,223,173,0.25)] p-4 text-sm font-semibold leading-6 text-[var(--sepia)]">
-                    {section.activity}
-                  </div>
-                ) : null}
-                {section.discussionPrompts.length ? (
-                  <ul className="mt-4 space-y-2">
-                    {section.discussionPrompts.map((prompt, promptIndex) => (
-                      <li
-                        key={`${prompt}-${promptIndex}`}
-                        className="flex gap-2 text-sm leading-6 text-[var(--charcoal)]"
-                      >
-                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--amber)]" />
-                        {prompt}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
               </div>
             ))}
           </div>
@@ -1011,14 +1010,11 @@ function PresentationPanel({
   onGenerate: () => Promise<unknown>
 }) {
   return (
-    <Card className="border-[var(--line)] bg-[#fffefa]">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Presentation className="h-5 w-5 text-[var(--amber-deep)]" />
-          Presentation
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <section className="space-y-4 pt-5">
+      <h2 className="flex items-center gap-2 text-sm font-bold text-[var(--charcoal)]">
+        <Presentation className="h-4 w-4 text-[var(--amber-deep)]" />
+        Presentation
+      </h2>
         <Button
           variant="outline"
           className="h-10 w-full rounded-xl"
@@ -1042,12 +1038,11 @@ function PresentationPanel({
             ))}
           </div>
         ) : (
-          <p className="rounded-2xl border border-dashed border-[var(--line-strong)] bg-[var(--paper)] p-4 text-sm leading-6 text-[var(--charcoal-muted)]">
+          <p className="rounded-xl border border-dashed border-[var(--line-strong)] bg-[var(--paper)] p-3 text-sm leading-6 text-[var(--charcoal-muted)]">
             Finalize the curriculum, then generate a PPTX deck.
           </p>
         )}
-      </CardContent>
-    </Card>
+    </section>
   )
 }
 
@@ -1063,7 +1058,7 @@ function PresentationDownload({
       : 'skip',
   )
   return (
-    <div className="rounded-2xl border border-[var(--line)] bg-[var(--paper)] p-3">
+    <div className="rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3">
       <div className="flex items-start gap-3">
         <FileCheck2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--amber-deep)]" />
         <div className="min-w-0 flex-1">

@@ -251,20 +251,20 @@ function TeacherDashboard() {
   )
 
   return (
-    <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-4 py-6">
-      <section className="mx-auto w-full max-w-7xl space-y-4">
+    <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-4 py-5 md:px-6">
+      <section className="mx-auto w-full max-w-[1540px] space-y-5">
         <TeacherHubHeader
           busyAction={busyAction}
           sessionCount={sessions.length}
           onCreate={handleCreateSession}
         />
-        <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="grid items-start gap-5 xl:grid-cols-[270px_minmax(0,1fr)]">
           <SessionPicker
             sessions={sessions}
             selectedSessionId={activeSessionId}
             onSelect={setSelectedSessionId}
           />
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-5">
             <SessionHeader
               title={session.title || 'Pillars of Support Live Session'}
               code={session.code}
@@ -281,25 +281,20 @@ function TeacherDashboard() {
               onDelete={handleDelete}
               onPrep={handlePrepClass}
             />
-            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
-              <div className="space-y-4">
-                <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-                  <AiPanel
-                    analysis={analysis}
-                    error={latestAnalysis?.error}
-                    analyzedSubmissionCount={
-                      latestAnalysis?.inputCursor.submissionCount
-                    }
-                    currentSubmissionCount={submissions?.length || 0}
-                  />
-                  <PillarsPanel submissions={submissions || []} />
-                </div>
-              </div>
-
-              <aside className="space-y-4">
-                <RosterPanel participants={participants || []} />
-                <ChatPanel messages={messages || []} />
-              </aside>
+            <div className="grid items-start gap-5 2xl:grid-cols-[330px_minmax(420px,1fr)_320px]">
+              <AiPanel
+                analysis={analysis}
+                error={latestAnalysis?.error}
+                analyzedSubmissionCount={
+                  latestAnalysis?.inputCursor.submissionCount
+                }
+                currentSubmissionCount={submissions?.length || 0}
+              />
+              <PillarsPanel submissions={submissions || []} />
+              <LiveSidePanel
+                participants={participants || []}
+                messages={messages || []}
+              />
             </div>
           </div>
         </div>
@@ -343,17 +338,17 @@ function TeacherHubHeader({
   onCreate: () => void
 }) {
   return (
-    <Card className="overflow-hidden border-[var(--line)] bg-[var(--surface-strong)] shadow-[0_18px_54px_rgba(28,28,28,0.06)]">
-      <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--charcoal)] text-white">
+    <div className="border-b border-[var(--line)] pb-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--charcoal)] text-white shadow-[0_12px_30px_rgba(28,28,28,0.16)]">
             <GraduationCap className="h-5 w-5" />
           </div>
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--amber-deep)]">
               Teacher dashboard
             </p>
-            <h1 className="mt-1 font-serif text-3xl leading-tight text-[var(--charcoal)]">
+            <h1 className="font-serif text-3xl leading-tight text-[var(--charcoal)]">
               Classes
             </h1>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--charcoal-soft)]">
@@ -371,8 +366,8 @@ function TeacherHubHeader({
             New class
           </Button>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
 
@@ -429,14 +424,14 @@ function SessionPicker({
   onSelect: (sessionId: Id<'sessions'>) => void
 }) {
   return (
-    <Card className="h-fit border-[var(--line)]">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
+    <aside className="sticky top-24 h-fit rounded-2xl border border-[var(--line)] bg-[rgba(255,253,248,0.72)] p-3">
+      <div className="mb-3 flex items-center gap-2 px-1">
           <LayoutDashboard className="h-4 w-4 text-[var(--amber-deep)]" />
+        <h2 className="text-sm font-bold text-[var(--charcoal)]">
           Class list
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 p-3 pt-0">
+        </h2>
+      </div>
+      <div className="space-y-2">
         {sessions.map((session) => {
           const meta = getSessionStatusMeta(session.status)
           const isSelected = session._id === selectedSessionId
@@ -444,10 +439,10 @@ function SessionPicker({
             <button
               key={session._id}
               className={[
-                'w-full rounded-lg border px-3 py-3 text-left transition-colors',
+                'w-full rounded-xl border px-3 py-3 text-left transition-colors',
                 isSelected
-                  ? 'border-primary bg-primary/5'
-                  : 'border-[var(--line)] bg-background hover:bg-muted/60',
+                  ? 'border-[var(--charcoal)] bg-[#fffdf8] shadow-[0_10px_24px_rgba(28,28,28,0.06)]'
+                  : 'border-transparent bg-transparent hover:border-[var(--line)] hover:bg-[#fffdf8]',
               ].join(' ')}
               type="button"
               onClick={() => onSelect(session._id)}
@@ -464,8 +459,8 @@ function SessionPicker({
             </button>
           )
         })}
-      </CardContent>
-    </Card>
+      </div>
+    </aside>
   )
 }
 
@@ -510,9 +505,9 @@ function SessionHeader({
   const canEnd = status !== 'ended'
 
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <section className="overflow-hidden rounded-3xl border border-[var(--line)] bg-[#fffdf8] shadow-[0_20px_60px_rgba(28,28,28,0.06)]">
+      <div className="grid lg:grid-cols-[minmax(320px,0.92fr)_minmax(420px,1fr)]">
+        <div className="border-b border-[var(--line)] p-5 lg:border-b-0 lg:border-r">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={`gap-1.5 ${statusMeta.className}`}>
@@ -524,20 +519,21 @@ function SessionHeader({
                 Expires {expires}
               </Badge>
             </div>
-            <h2 className="mt-3 font-serif text-3xl leading-tight text-[var(--charcoal)]">
+            <h2 className="mt-3 max-w-xl font-serif text-3xl leading-tight text-[var(--charcoal)]">
               {title}
             </h2>
-            <div className="mt-3 flex flex-wrap items-end gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <div className="mt-5 rounded-2xl bg-[var(--charcoal)] p-4 text-white">
+              <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber-pale)]">
                   Join code
                 </p>
-                <p className="font-mono text-4xl font-semibold tracking-[0.18em] text-foreground">
+                  <p className="font-mono text-4xl font-semibold tracking-[0.18em] text-white">
                   {code}
                 </p>
               </div>
               <Button
-                className="mb-1"
+                  className="mb-1 border-white/20 bg-white/10 text-white hover:bg-white/15 hover:text-white"
                 size="icon"
                 variant="outline"
                 title="Copy join code"
@@ -546,19 +542,24 @@ function SessionHeader({
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">
+            </div>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
               {statusMeta.description} Use prep for curriculum and slides, then
               run the live room here.
             </p>
           </div>
+        </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col justify-between gap-4 p-5">
+          <div className="grid gap-3 sm:grid-cols-2">
             <Stat icon={<Users />} label="joined" value={participantCount} />
             <Stat
               icon={<Sparkles />}
               label="submitted"
               value={submissionCount}
             />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               disabled={busyAction === 'prep'}
@@ -610,8 +611,8 @@ function SessionHeader({
             </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </section>
   )
 }
 
@@ -625,7 +626,7 @@ function Stat({
   value: number
 }) {
   return (
-    <div className="flex min-w-24 items-center gap-2 rounded-lg bg-muted px-3 py-2 text-muted-foreground">
+    <div className="flex min-w-24 items-center gap-2 rounded-2xl bg-[var(--paper-warm)] px-4 py-3 text-muted-foreground">
       <span className="[&_svg]:h-4 [&_svg]:w-4">{icon}</span>
       <span className="text-lg font-semibold text-foreground">{value}</span>
       <span className="text-xs">{label}</span>
@@ -650,7 +651,7 @@ function AiPanel({
     currentSubmissionCount > analyzedSubmissionCount
 
   return (
-    <Card className="border-slate-800 bg-slate-950 text-white">
+    <Card className="h-fit border-slate-800 bg-slate-950 text-white shadow-[0_20px_50px_rgba(4,7,18,0.18)]">
       <CardHeader className="flex flex-row items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-teal-200">
@@ -852,7 +853,7 @@ function PillarsPanel({
   )
 
   return (
-    <Card>
+    <Card className="h-fit border-[var(--line)] bg-[#fffdf8]">
       <CardHeader className="flex flex-row items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--amber)]">
@@ -1076,40 +1077,11 @@ function AccessibilitySignal({
   )
 }
 
-function RosterPanel({
+function LiveSidePanel({
   participants,
-}: {
-  participants: Array<{ _id: string; displayName?: string }>
-}) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-3">
-        <CardTitle className="text-base">Roster</CardTitle>
-        <span className="text-xs text-muted-foreground">
-          {participants.length} joined
-        </span>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {participants.length ? (
-          participants.map((participant) => (
-            <div key={participant._id} className="flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-sm text-foreground">
-                {participant.displayName || 'Student'}
-              </span>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-muted-foreground">Waiting for students.</p>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function ChatPanel({
   messages,
 }: {
+  participants: Array<{ _id: string; displayName?: string }>
   messages: Array<{
     _id: string
     authorRole: 'teacher' | 'student'
@@ -1119,17 +1091,51 @@ function ChatPanel({
   }>
 }) {
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center gap-2">
-          <MessageSquareText className="h-4 w-4 text-muted-foreground" />
-          <CardTitle className="text-base">Live chat</CardTitle>
+    <aside className="h-fit rounded-3xl border border-[var(--line)] bg-[rgba(255,253,248,0.7)] p-4">
+      <section>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-bold text-[var(--charcoal)]">
+            Roster
+          </h2>
+          <span className="rounded-full bg-[var(--paper-warm)] px-2.5 py-1 text-xs font-semibold text-[var(--charcoal-muted)]">
+            {participants.length} joined
+          </span>
         </div>
-      </CardHeader>
-      <CardContent className="max-h-[560px] space-y-3 overflow-y-auto pr-4">
+        <div className="mt-3 space-y-2">
+          {participants.length ? (
+            participants.slice(0, 12).map((participant) => (
+              <div
+                key={participant._id}
+                className="flex items-center gap-2 text-sm text-foreground"
+              >
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="truncate">
+                  {participant.displayName || 'Student'}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm leading-6 text-muted-foreground">
+              Waiting for students.
+            </p>
+          )}
+        </div>
+      </section>
+
+      <section className="mt-5 border-t border-[var(--line)] pt-5">
+        <div className="flex items-center gap-2">
+          <MessageSquareText className="h-4 w-4 text-[var(--amber-deep)]" />
+          <h2 className="text-sm font-bold text-[var(--charcoal)]">
+            Live chat
+          </h2>
+        </div>
+        <div className="mt-3 max-h-[520px] space-y-3 overflow-y-auto pr-1">
         {messages.length ? (
           messages.slice(-80).map((message) => (
-            <div key={message._id} className="rounded-lg bg-muted/60 p-3">
+            <div
+              key={message._id}
+              className="border-l-2 border-[var(--line-strong)] py-1 pl-3"
+            >
               <div className="mb-1 flex items-center justify-between gap-2">
                 <span className="text-xs font-semibold text-foreground">
                   {message.displayName || message.authorRole}
@@ -1149,7 +1155,8 @@ function ChatPanel({
         ) : (
           <p className="text-sm text-muted-foreground">No messages yet.</p>
         )}
-      </CardContent>
-    </Card>
+        </div>
+      </section>
+    </aside>
   )
 }
