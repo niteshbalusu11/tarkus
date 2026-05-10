@@ -8,6 +8,12 @@ import {
   MAX_LLM_DOCUMENT_CONTEXT_CHARS,
   MAX_PREP_DOCUMENT_UPLOAD_BYTES,
 } from '../../convex/prepLimits'
+import {
+  applyDeterministicPresentationEdit,
+  ensureImagePlacements,
+  MAX_PRESENTATION_SLIDES,
+  normalizeSlideSpec,
+} from '../../convex/prepNode'
 import { buildCappedSourceDocuments } from '../../convex/prepPrompt'
 import schema from '../../convex/schema'
 import { modules } from './test.setup'
@@ -182,6 +188,30 @@ describe('prep workspace auth', () => {
       workspaceId,
     })
     expect(workspace.title).toBe('Private curriculum')
+  })
+
+  it('requires teacher role before running prep generation actions', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    await onboard(t, studentIdentity, 'student', 'Student')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {
+      title: 'Action-gated prep',
+    })
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+
+    await expect(
+      t.action(api.prepNode.generatePresentation, { workspaceId }),
+    ).rejects.toThrow('Not authenticated')
+    await expect(
+      student.action(api.prepNode.generateCurriculum, { workspaceId }),
+    ).rejects.toThrow('Only teachers can use this')
+    await expect(
+      student.action(api.prepNode.generatePresentation, { workspaceId }),
+    ).rejects.toThrow('Only teachers can use this')
   })
 
   it('stores a teacher prep brief on class-scoped prep only', async () => {
@@ -513,5 +543,253 @@ describe('prep workspace auth', () => {
     expect(sourceDocuments.at(-1)?.text.length).toBeLessThan(
       MAX_LLM_DOCUMENT_CONTEXT_CHARS,
     )
+  })
+
+  it('keeps presentation slide specs up to the product max with stable ids', () => {
+    const fallback = {
+      title: 'Fallback deck',
+      slides: [
+        {
+          id: 'slide-01-fallback',
+          type: 'title' as const,
+          title: 'Fallback deck',
+          bullets: [],
+          speakerNotes: '',
+        },
+      ],
+    }
+    const result = normalizeSlideSpec(
+      {
+        title: 'Expanded deck',
+        slides: Array.from({ length: MAX_PRESENTATION_SLIDES + 5 }, (_, i) => ({
+          type: 'concept',
+          title: `Expanded slide ${i + 1}`,
+          bullets: [`Point ${i + 1}`],
+          speakerNotes: `Notes ${i + 1}`,
+        })),
+      },
+      fallback,
+    )
+
+    expect(result.slides).toHaveLength(MAX_PRESENTATION_SLIDES)
+    expect(result.slides[0]).toMatchObject({
+      id: 'slide-01-expanded-slide-1',
+      title: 'Expanded slide 1',
+    })
+    expect(result.slides.at(-1)?.title).toBe(
+      `Expanded slide ${MAX_PRESENTATION_SLIDES}`,
+    )
+  })
+
+  it('preserves presentation images unless the edit explicitly removes them', () => {
+    const fallback = {
+      title: 'Image deck',
+      slides: [
+        {
+          id: 'slide-01-case-study',
+          type: 'concept' as const,
+          title: 'Case study',
+          bullets: ['Original point'],
+          speakerNotes: 'Original notes',
+          imageFileName: 'case-study.png',
+        },
+        {
+          id: 'slide-02-wrap-up',
+          type: 'summary' as const,
+          title: 'Wrap up',
+          bullets: ['Close'],
+          speakerNotes: 'Close notes',
+          imageFileName: 'wrap-up.png',
+        },
+      ],
+    }
+    const result = normalizeSlideSpec(
+      {
+        title: 'Image deck',
+        slides: [
+          {
+            id: 'slide-01-case-study',
+            type: 'concept',
+            title: 'Case study',
+            bullets: ['Updated point'],
+            speakerNotes: 'Updated notes',
+          },
+          {
+            id: 'slide-02-wrap-up',
+            type: 'summary',
+            title: 'Wrap up',
+            bullets: ['Close'],
+            speakerNotes: 'Close notes',
+            imageFileName: 'wrapup.png',
+          },
+          {
+            id: 'slide-03-no-image',
+            type: 'summary',
+            title: 'No image',
+            bullets: ['Close'],
+            speakerNotes: 'Close notes',
+            imageFileName: '',
+          },
+        ],
+      },
+      fallback,
+      ['case-study.png', 'wrap-up.png'],
+    )
+
+    expect(result.slides[0].imageFileName).toBe('case-study.png')
+    expect(result.slides[1].imageFileName).toBe('wrap-up.png')
+    expect(result.slides[2].imageFileName).toBeUndefined()
+
+    const moved = normalizeSlideSpec(
+      {
+        title: 'Moved image deck',
+        slides: [
+          {
+            id: 'slide-01-case-study',
+            type: 'concept',
+            title: 'Case study',
+            bullets: ['Updated point'],
+            speakerNotes: 'Updated notes',
+          },
+          {
+            id: 'slide-02-wrap-up',
+            type: 'summary',
+            title: 'Wrap up',
+            bullets: ['Close'],
+            speakerNotes: 'Close notes',
+            imageFileName: 'case-study.png',
+          },
+        ],
+      },
+      fallback,
+      ['case-study.png', 'wrap-up.png'],
+    )
+    expect(moved.slides[0].imageFileName).toBeUndefined()
+    expect(moved.slides[1].imageFileName).toBe('case-study.png')
+  })
+
+  it('falls back to placing uploaded images when the model omits them', () => {
+    const slideSpec = {
+      title: 'Image deck',
+      slides: [
+        {
+          id: 'slide-01-title',
+          type: 'title' as const,
+          title: 'Image deck',
+          bullets: [],
+          speakerNotes: '',
+        },
+        {
+          id: 'slide-02-context',
+          type: 'concept' as const,
+          title: 'Context',
+          bullets: ['Set the frame'],
+          speakerNotes: '',
+        },
+        {
+          id: 'slide-03-case',
+          type: 'activity' as const,
+          title: 'Case analysis',
+          bullets: ['Apply the tool'],
+          speakerNotes: '',
+        },
+      ],
+    }
+
+    const result = ensureImagePlacements(slideSpec, [
+      'el-salvador-map.png',
+      'norway-1942.jpg',
+    ])
+
+    expect(result.slides[0].imageFileName).toBeUndefined()
+    expect(result.slides[1].imageFileName).toBe('el-salvador-map.png')
+    expect(result.slides[2].imageFileName).toBe('norway-1942.jpg')
+  })
+
+  it('matches image filenames loosely when normalizing model output', () => {
+    const fallback = {
+      title: 'Image deck',
+      slides: [
+        {
+          id: 'slide-01-case',
+          type: 'concept' as const,
+          title: 'Case',
+          bullets: [],
+          speakerNotes: '',
+        },
+      ],
+    }
+
+    const result = normalizeSlideSpec(
+      {
+        title: 'Image deck',
+        slides: [
+          {
+            id: 'slide-01-case',
+            type: 'concept',
+            title: 'Case',
+            bullets: ['Analyze the campaign'],
+            speakerNotes: '',
+            imageFileName: 'El Salvador Map',
+          },
+        ],
+      },
+      fallback,
+      ['el-salvador-map.png'],
+    )
+
+    expect(result.slides[0].imageFileName).toBe('el-salvador-map.png')
+  })
+
+  it('moves an image between slides without requiring an AI JSON response', () => {
+    const slideSpec = {
+      title: 'Image deck',
+      slides: [
+        {
+          id: 'slide-01-title',
+          type: 'title' as const,
+          title: 'Image deck',
+          bullets: [],
+          speakerNotes: '',
+        },
+        {
+          id: 'slide-02-context',
+          type: 'concept' as const,
+          title: 'Context',
+          bullets: [],
+          speakerNotes: '',
+        },
+        {
+          id: 'slide-03-action',
+          type: 'concept' as const,
+          title: 'Action',
+          bullets: [],
+          speakerNotes: '',
+        },
+        {
+          id: 'slide-04-map',
+          type: 'concept' as const,
+          title: 'Map',
+          bullets: [],
+          speakerNotes: '',
+          imageFileName: 'el-salvador-map.png',
+        },
+        {
+          id: 'slide-05-debrief',
+          type: 'summary' as const,
+          title: 'Debrief',
+          bullets: [],
+          speakerNotes: '',
+        },
+      ],
+    }
+
+    const result = applyDeterministicPresentationEdit(
+      slideSpec,
+      'move image from slide 4 to slide 5',
+    )
+
+    expect(result?.slides[3].imageFileName).toBeUndefined()
+    expect(result?.slides[4].imageFileName).toBe('el-salvador-map.png')
   })
 })

@@ -36,6 +36,7 @@ type CurriculumContent = {
 type SlideSpec = {
   title: string
   slides: Array<{
+    id?: string
     type: 'title' | 'concept' | 'discussion' | 'activity' | 'summary'
     title: string
     bullets: Array<string>
@@ -52,11 +53,19 @@ type PreparedImage = {
 const DEFAULT_PILLARS_PREP_BRIEF =
   'Create the curriculum for a two hour class on pillar analysis. Include classic concepts of obedience, pillar analysis, how to dissect pillars, push vs pull from Gene Sharp, Popovic and Helvey. Include two Pillars case studies to teach in the pillars module: El Salvador 1944 and Norway 1942.'
 
+export const MAX_PRESENTATION_SLIDES = 40
+
 function requireIdentity(identity: UserIdentity | null) {
   if (!identity) {
     throw new Error('Not authenticated')
   }
   return identity
+}
+
+async function requireTeacherForAction(ctx: ActionCtx, identity: UserIdentity) {
+  await ctx.runQuery(internal.prep.requireTeacherForAction, {
+    teacherTokenIdentifier: identity.tokenIdentifier,
+  })
 }
 
 function cleanText(text: string) {
@@ -71,7 +80,39 @@ function cleanText(text: string) {
 function safeJsonParse(value: string) {
   const trimmed = value.trim()
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/)
-  return JSON.parse(fenced ? fenced[1] : trimmed)
+  const jsonText = fenced ? fenced[1].trim() : extractJsonObject(trimmed)
+  return JSON.parse(jsonText)
+}
+
+function extractJsonObject(value: string) {
+  if (value.startsWith('{') && value.endsWith('}')) return value
+  const start = value.indexOf('{')
+  if (start === -1) return value
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let index = start; index < value.length; index += 1) {
+    const char = value[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (char === '\\') {
+      escaped = true
+      continue
+    }
+    if (char === '"') {
+      inString = !inString
+      continue
+    }
+    if (inString) continue
+    if (char === '{') depth += 1
+    if (char === '}') {
+      depth -= 1
+      if (depth === 0) return value.slice(start, index + 1)
+    }
+  }
+  return value
 }
 
 function fallbackCurriculum(input: {
@@ -239,18 +280,21 @@ function slideSpecFromCurriculum(curriculum: CurriculumContent): SlideSpec {
     title: curriculum.title,
     slides: [
       {
+        id: 'slide-01-title',
         type: 'title',
         title: curriculum.title,
         bullets: [curriculum.audience, `${curriculum.durationMinutes} minutes`],
         speakerNotes: curriculum.teacherNotes,
       },
       {
+        id: 'slide-02-learning-objectives',
         type: 'concept',
         title: 'Learning objectives',
         bullets: curriculum.learningObjectives.slice(0, 4),
         speakerNotes: 'Use this slide to set expectations for the session.',
       },
-      ...curriculum.agenda.slice(0, 8).map((section) => ({
+      ...curriculum.agenda.slice(0, 8).map((section, index) => ({
+        id: slideIdFor(index + 2, section.title),
         type: section.activity ? ('activity' as const) : ('concept' as const),
         title: section.title,
         bullets: [
@@ -263,6 +307,7 @@ function slideSpecFromCurriculum(curriculum: CurriculumContent): SlideSpec {
         speakerNotes: section.discussionPrompts.join('\n'),
       })),
       {
+        id: 'slide-discussion-prompts',
         type: 'discussion',
         title: 'Discussion prompts',
         bullets: curriculum.agenda
@@ -272,6 +317,7 @@ function slideSpecFromCurriculum(curriculum: CurriculumContent): SlideSpec {
           'Use these prompts when students need a concrete entry point.',
       },
       {
+        id: 'slide-close-and-assess',
         type: 'summary',
         title: 'Close and assess',
         bullets: curriculum.assessmentIdeas.slice(0, 4),
@@ -425,6 +471,7 @@ export const extractDocumentText = action({
   args: { documentId: v.id('prepDocuments') },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherForAction(ctx, identity)
     const document: Doc<'prepDocuments'> = await ctx.runQuery(
       internal.prep.getDocumentForAction,
       {
@@ -470,6 +517,7 @@ export const generateCurriculum = action({
   args: { workspaceId: v.id('prepWorkspaces') },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherForAction(ctx, identity)
     const input: {
       workspace: Doc<'prepWorkspaces'>
       documents: Array<Doc<'prepDocuments'>>
@@ -534,6 +582,7 @@ export const refineCurriculum = action({
   },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherForAction(ctx, identity)
     const input: {
       workspace: Doc<'prepWorkspaces'>
       latestCurriculum: Doc<'curricula'> | null
@@ -602,6 +651,7 @@ export const generatePresentation = action({
   args: { workspaceId: v.id('prepWorkspaces') },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherForAction(ctx, identity)
     const input: {
       workspace: Doc<'prepWorkspaces'>
       documents: Array<Doc<'prepDocuments'>>
@@ -630,8 +680,7 @@ export const generatePresentation = action({
     const fallback = slideSpecFromCurriculum(curriculum)
     const result = await openRouterJson<unknown>({
       fallback,
-      system:
-        'You are TARKUS, creating a classroom PowerPoint outline from a finalized curriculum. Return JSON only with shape {"title":"string","slides":[{"type":"title|concept|discussion|activity|summary","title":"string","bullets":["string"],"speakerNotes":"string","imageFileName":"optional exact uploaded image filename"}]}. Use concise slide text and richer speaker notes. Keep to 8-12 slides. If uploaded images are useful, inspect them and assign an exact imageFileName to the most relevant slides. For this demo, the deck should emphasize pillar analysis, obedience, dissecting pillars, push vs pull, Gene Sharp, Popovic, Helvey, El Salvador 1944, and Norway 1942.',
+      system: `You are TARKUS, creating a classroom PowerPoint outline from a finalized curriculum. Return JSON only with shape {"title":"string","slides":[{"id":"stable-slide-id","type":"title|concept|discussion|activity|summary","title":"string","bullets":["string"],"speakerNotes":"string","imageFileName":"optional exact uploaded image filename"}]}. Use concise slide text and richer speaker notes. Generate 10-14 slides by default, unless the teacher prep context clearly calls for a different count. Never exceed ${MAX_PRESENTATION_SLIDES} slides. Use stable unique id values for every slide. If uploaded images are useful, inspect them and assign an exact imageFileName from uploadedImages to the most relevant slides. For this demo, the deck should emphasize pillar analysis, obedience, dissecting pillars, push vs pull, Gene Sharp, Popovic, Helvey, El Salvador 1944, and Norway 1942.`,
       user: {
         curriculum,
         teacherPrepBrief:
@@ -648,6 +697,10 @@ export const generatePresentation = action({
       fallback,
       imageDocs.map((document) => document.fileName),
     )
+    const placedSlideSpec = ensureImagePlacements(
+      slideSpec,
+      imageDocs.map((document) => document.fileName),
+    )
     const fileName = `${slugify(curriculum.title)}.pptx`
     const presentationId: Id<'presentations'> = await ctx.runMutation(
       internal.prep.createPresentationRecord,
@@ -655,13 +708,13 @@ export const generatePresentation = action({
         workspaceId: args.workspaceId,
         teacherTokenIdentifier: identity.tokenIdentifier,
         curriculumId: input.latestCurriculum._id,
-        slideSpec,
+        slideSpec: placedSlideSpec,
         fileName,
       },
     )
 
     try {
-      const bytes = await buildPptx(slideSpec, images)
+      const bytes = await buildPptx(placedSlideSpec, images)
       const storageId = await ctx.storage.store(
         new Blob([bytes], {
           type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
@@ -701,6 +754,7 @@ export const refinePresentation = action({
   },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherForAction(ctx, identity)
     const instruction = args.instruction.trim()
     if (!instruction) {
       throw new Error('Instruction is required')
@@ -751,10 +805,52 @@ export const refinePresentation = action({
       curriculumFallback,
       allowedImageFileNames,
     )
+    const deterministicSlideSpec = applyDeterministicPresentationEdit(
+      currentSlideSpec,
+      instruction,
+    )
+    if (deterministicSlideSpec) {
+      await ctx.runMutation(internal.prep.savePresentationSlideSpecDraft, {
+        presentationId: args.presentationId,
+        teacherTokenIdentifier: identity.tokenIdentifier,
+        slideSpec: deterministicSlideSpec,
+      })
+      try {
+        const bytes = await buildPptx(deterministicSlideSpec, images)
+        const storageId = await ctx.storage.store(
+          new Blob([bytes], {
+            type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+          }),
+        )
+        await ctx.runMutation(internal.prep.finishPresentationEdit, {
+          presentationId: args.presentationId,
+          teacherTokenIdentifier: identity.tokenIdentifier,
+          editStatus: 'idle',
+          downloadStatus: 'ready',
+          storageId,
+          assistantMessage:
+            'Moved the image and refreshed the PPTX download.',
+        })
+        return { presentationId: args.presentationId }
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Could not refresh the downloadable PPTX'
+        await ctx.runMutation(internal.prep.finishPresentationEdit, {
+          presentationId: args.presentationId,
+          teacherTokenIdentifier: identity.tokenIdentifier,
+          editStatus: 'idle',
+          downloadStatus: 'failed',
+          downloadError: message,
+          assistantMessage: `Updated the preview, but could not refresh the downloadable PPTX. ${message}`,
+        })
+        return { presentationId: args.presentationId, error: message }
+      }
+    }
     const result = await openRouterJson<unknown>({
       fallback: currentSlideSpec,
-      system:
-        'You are TARKUS, editing a classroom PowerPoint outline for strategic nonviolence training. Return JSON only with shape {"title":"string","slides":[{"type":"title|concept|discussion|activity|summary","title":"string","bullets":["string"],"speakerNotes":"string","imageFileName":"optional exact uploaded image filename"}]}. Apply the teacher instruction directly to the slide deck. Preserve the deck structure unless the teacher asks to add, remove, or reorder slides. Use concise slide text and richer speaker notes. Keep the deck to 6-14 slides. Only use imageFileName values from the uploadedImages list.',
+      system: `You are TARKUS, editing a classroom PowerPoint outline for strategic nonviolence training. Return the full updated deck as JSON only with shape {"title":"string","slides":[{"id":"stable-slide-id","type":"title|concept|discussion|activity|summary","title":"string","bullets":["string"],"speakerNotes":"string","imageFileName":"optional exact uploaded image filename"}]}. Apply the teacher instruction directly to the slide deck. Preserve existing slide ids exactly for slides that still exist; create stable unique ids only for new slides. Preserve the deck structure unless the teacher asks to add, remove, or reorder slides. If the teacher requests a slide count, honor it as closely as possible up to ${MAX_PRESENTATION_SLIDES} slides. Use concise slide text and richer speaker notes. Only use imageFileName values from the uploadedImages list. Preserve existing imageFileName placements unless the teacher explicitly asks to move or remove images. If moving images, move the exact existing filename to the requested slide. If removing an image, set imageFileName to an empty string for that slide.`,
       user: {
         currentSlideSpec,
         teacherInstruction: instruction,
@@ -787,11 +883,20 @@ export const refinePresentation = action({
       return { presentationId: args.presentationId, error: result.error }
     }
 
-    const slideSpec = normalizeSlideSpec(
+    const normalizedSlideSpec = normalizeSlideSpec(
       result.output,
       currentSlideSpec,
       allowedImageFileNames,
     )
+    const slideSpec =
+      shouldAutoPlaceImagesOnEdit(
+        instruction,
+        currentSlideSpec,
+        normalizedSlideSpec,
+        allowedImageFileNames,
+      )
+        ? ensureImagePlacements(normalizedSlideSpec, allowedImageFileNames)
+        : normalizedSlideSpec
     await ctx.runMutation(internal.prep.savePresentationSlideSpecDraft, {
       presentationId: args.presentationId,
       teacherTokenIdentifier: identity.tokenIdentifier,
@@ -833,7 +938,7 @@ export const refinePresentation = action({
   },
 })
 
-function normalizeSlideSpec(
+export function normalizeSlideSpec(
   value: unknown,
   fallback: SlideSpec,
   allowedImageFileNames: Array<string> = [],
@@ -841,41 +946,272 @@ function normalizeSlideSpec(
   const candidate = value as Partial<SlideSpec> | null
   if (!candidate || typeof candidate !== 'object') return fallback
   const allowedImages = new Set(allowedImageFileNames)
+  const allowedImageLookup = buildAllowedImageLookup(allowedImageFileNames)
+  const candidateSlides = Array.isArray(candidate.slides)
+    ? candidate.slides
+    : null
+  if (!candidateSlides) {
+    return fallback
+  }
+  const explicitlyAssignedImages = new Set(
+    candidateSlides
+      .map((slide) => {
+        const requested = (slide as Record<string, unknown>).imageFileName
+        return typeof requested === 'string'
+          ? resolveAllowedImageFileName(requested, allowedImageLookup)
+          : null
+      })
+      .filter(
+        (imageFileName): imageFileName is string => imageFileName !== null,
+      ),
+  )
   return {
     title:
       typeof candidate.title === 'string' ? candidate.title : fallback.title,
-    slides: Array.isArray(candidate.slides)
-      ? candidate.slides
-          .map((slide) => {
-            const item = slide as Partial<SlideSpec['slides'][number]>
-            return {
-              type:
-                item.type === 'title' ||
-                item.type === 'concept' ||
-                item.type === 'discussion' ||
-                item.type === 'activity' ||
-                item.type === 'summary'
-                  ? item.type
-                  : 'concept',
-              title: typeof item.title === 'string' ? item.title : 'Slide',
-              bullets: Array.isArray(item.bullets)
-                ? item.bullets.filter(
-                    (bullet): bullet is string => typeof bullet === 'string',
-                  )
-                : [],
-              speakerNotes:
-                typeof item.speakerNotes === 'string' ? item.speakerNotes : '',
-              imageFileName:
-                typeof item.imageFileName === 'string' &&
-                allowedImages.has(item.imageFileName)
-                  ? item.imageFileName
-                  : undefined,
-            }
-          })
-          .filter((slide) => slide.title.trim())
-          .slice(0, 14)
-      : fallback.slides,
+    slides: candidateSlides
+      .map((slide, index) => {
+        const item = slide as Record<string, unknown>
+        const title = typeof item.title === 'string' ? item.title : 'Slide'
+        const fallbackSlide = findFallbackSlide(fallback, item, index)
+        const imageFileName = resolveSlideImageFileName(
+          item,
+          fallbackSlide,
+          allowedImages,
+          allowedImageLookup,
+          explicitlyAssignedImages,
+        )
+        const normalizedSlide: SlideSpec['slides'][number] = {
+          id:
+            typeof item.id === 'string' && item.id.trim()
+              ? item.id.trim()
+              : reusableFallbackSlideId(fallbackSlide, title) ||
+                slideIdFor(index, title),
+          type:
+            item.type === 'title' ||
+            item.type === 'concept' ||
+            item.type === 'discussion' ||
+            item.type === 'activity' ||
+            item.type === 'summary'
+              ? item.type
+              : fallbackSlide?.type || 'concept',
+          title,
+          bullets: Array.isArray(item.bullets)
+            ? item.bullets.filter(
+                (bullet): bullet is string => typeof bullet === 'string',
+              )
+            : fallbackSlide?.bullets || [],
+          speakerNotes:
+            typeof item.speakerNotes === 'string'
+              ? item.speakerNotes
+              : fallbackSlide?.speakerNotes || '',
+        }
+        if (imageFileName) {
+          normalizedSlide.imageFileName = imageFileName
+        }
+        return normalizedSlide
+      })
+      .filter((slide) => slide.title.trim())
+      .slice(0, MAX_PRESENTATION_SLIDES),
   }
+}
+
+function reusableFallbackSlideId(
+  fallbackSlide: SlideSpec['slides'][number] | undefined,
+  title: string,
+) {
+  if (!fallbackSlide?.id) return undefined
+  if (fallbackSlide.title.trim().toLowerCase() !== title.trim().toLowerCase()) {
+    return undefined
+  }
+  return fallbackSlide.id
+}
+
+function findFallbackSlide(
+  fallback: SlideSpec,
+  item: Record<string, unknown>,
+  index: number,
+): SlideSpec['slides'][number] | undefined {
+  if (typeof item.id === 'string' && item.id.trim()) {
+    const id = item.id.trim()
+    const byId = fallback.slides.find((slide) => slide.id === id)
+    if (byId) return byId
+  }
+  if (typeof item.title === 'string' && item.title.trim()) {
+    const title = item.title.trim().toLowerCase()
+    const byTitle = fallback.slides.find(
+      (slide) => slide.title.trim().toLowerCase() === title,
+    )
+    if (byTitle) return byTitle
+  }
+  return fallback.slides[index]
+}
+
+function resolveSlideImageFileName(
+  item: Record<string, unknown>,
+  fallbackSlide: SlideSpec['slides'][number] | undefined,
+  allowedImages: Set<string>,
+  allowedImageLookup: Map<string, string>,
+  explicitlyAssignedImages: Set<string>,
+) {
+  const requested = item.imageFileName
+  if (typeof requested === 'string') {
+    const trimmed = requested.trim()
+    if (isExplicitImageRemoval(trimmed)) return undefined
+    const resolved = resolveAllowedImageFileName(trimmed, allowedImageLookup)
+    if (resolved) return resolved
+  }
+  if (
+    fallbackSlide?.imageFileName &&
+    allowedImages.has(fallbackSlide.imageFileName) &&
+    !explicitlyAssignedImages.has(fallbackSlide.imageFileName)
+  ) {
+    return fallbackSlide.imageFileName
+  }
+  return undefined
+}
+
+function buildAllowedImageLookup(allowedImageFileNames: Array<string>) {
+  const lookup = new Map<string, string>()
+  for (const fileName of allowedImageFileNames) {
+    lookup.set(fileName, fileName)
+    lookup.set(fileName.toLowerCase(), fileName)
+    lookup.set(slugify(fileName), fileName)
+    lookup.set(slugify(fileName.replace(/\.[^.]+$/, '')), fileName)
+  }
+  return lookup
+}
+
+function resolveAllowedImageFileName(
+  requested: string,
+  lookup: Map<string, string>,
+) {
+  const trimmed = requested.trim()
+  return (
+    lookup.get(trimmed) ||
+    lookup.get(trimmed.toLowerCase()) ||
+    lookup.get(slugify(trimmed)) ||
+    lookup.get(slugify(trimmed.replace(/\.[^.]+$/, ''))) ||
+    null
+  )
+}
+
+function isExplicitImageRemoval(value: string) {
+  return (
+    !value ||
+    value.toLowerCase() === 'none' ||
+    value.toLowerCase() === 'null' ||
+    value.toLowerCase() === 'remove' ||
+    value.toLowerCase() === 'removed' ||
+    value.toLowerCase() === 'no image'
+  )
+}
+
+export function ensureImagePlacements(
+  slideSpec: SlideSpec,
+  imageFileNames: Array<string>,
+): SlideSpec {
+  const availableImageFileNames = imageFileNames.filter(Boolean)
+  if (!availableImageFileNames.length) return slideSpec
+  if (slideSpec.slides.some((slide) => slide.imageFileName)) return slideSpec
+
+  const eligibleIndexes = slideSpec.slides
+    .map((slide, index) => ({ slide, index }))
+    .filter(({ slide, index }) => index > 0 && slide.type !== 'title')
+    .map(({ index }) => index)
+  if (!eligibleIndexes.length) return slideSpec
+
+  const imageCount = Math.min(
+    availableImageFileNames.length,
+    eligibleIndexes.length,
+  )
+  const selectedIndexes = Array.from({ length: imageCount }, (_, imageIndex) => {
+    const position = Math.round(
+      (imageIndex * (eligibleIndexes.length - 1)) / Math.max(imageCount - 1, 1),
+    )
+    return eligibleIndexes[position]
+  })
+  const placements = new Map(
+    selectedIndexes.map((slideIndex, imageIndex) => [
+      slideIndex,
+      availableImageFileNames[imageIndex],
+    ]),
+  )
+
+  return {
+    ...slideSpec,
+    slides: slideSpec.slides.map((slide, index) => {
+      const imageFileName = placements.get(index)
+      return imageFileName ? { ...slide, imageFileName } : slide
+    }),
+  }
+}
+
+function shouldAutoPlaceImagesOnEdit(
+  instruction: string,
+  currentSlideSpec: SlideSpec,
+  updatedSlideSpec: SlideSpec,
+  imageFileNames: Array<string>,
+) {
+  if (!imageFileNames.length) return false
+  if (updatedSlideSpec.slides.some((slide) => slide.imageFileName)) return false
+  if (currentSlideSpec.slides.some((slide) => slide.imageFileName)) return false
+  if (hasImageRemovalIntent(instruction)) return false
+  return hasImagePlacementIntent(instruction)
+}
+
+export function applyDeterministicPresentationEdit(
+  slideSpec: SlideSpec,
+  instruction: string,
+): SlideSpec | null {
+  const moveImageMatch = instruction.match(
+    /\bmove\s+(?:the\s+)?(?:image|photo|picture|visual)\s+from\s+slide\s+(\d+)\s+to\s+slide\s+(\d+)\b/i,
+  )
+  if (!moveImageMatch) return null
+  const fromIndex = Number(moveImageMatch[1]) - 1
+  const toIndex = Number(moveImageMatch[2]) - 1
+  if (
+    !Number.isInteger(fromIndex) ||
+    !Number.isInteger(toIndex) ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= slideSpec.slides.length ||
+    toIndex >= slideSpec.slides.length ||
+    fromIndex === toIndex
+  ) {
+    return null
+  }
+  const sourceImageFileName = slideSpec.slides[fromIndex]?.imageFileName
+  if (!sourceImageFileName) return null
+  return {
+    ...slideSpec,
+    slides: slideSpec.slides.map((slide, index) => {
+      if (index === fromIndex) {
+        const { imageFileName: _imageFileName, ...rest } = slide
+        return rest
+      }
+      if (index === toIndex) {
+        return { ...slide, imageFileName: sourceImageFileName }
+      }
+      return slide
+    }),
+  }
+}
+
+function hasImagePlacementIntent(instruction: string) {
+  return /\b(image|images|photo|photos|picture|pictures|visual|visuals|diagram|diagrams)\b/i.test(
+    instruction,
+  )
+}
+
+function hasImageRemovalIntent(instruction: string) {
+  return (
+    /\b(remove|delete|drop|clear)\b.{0,32}\b(image|images|photo|photos|picture|pictures|visual|visuals|diagram|diagrams)\b/i.test(
+      instruction,
+    ) ||
+    /\b(no|without)\b.{0,16}\b(image|images|photo|photos|picture|pictures|visual|visuals|diagram|diagrams)\b/i.test(
+      instruction,
+    )
+  )
 }
 
 function slugify(value: string) {
@@ -886,6 +1222,11 @@ function slugify(value: string) {
       .replace(/^-|-$/g, '')
       .slice(0, 64) || 'tarkus-curriculum'
   )
+}
+
+function slideIdFor(index: number, title: string) {
+  const position = String(index + 1).padStart(2, '0')
+  return `slide-${position}-${slugify(title).slice(0, 32) || 'untitled'}`
 }
 
 async function buildPptx(

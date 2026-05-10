@@ -567,6 +567,23 @@ export const finalizeCurriculum = mutation({
   },
 })
 
+export const requireTeacherForAction = internalQuery({
+  args: { teacherTokenIdentifier: v.string() },
+  handler: async (ctx, args) => {
+    const profile = await getUserProfileByTokenIdentifier(
+      ctx,
+      args.teacherTokenIdentifier,
+    )
+    if (!profile) {
+      throw new Error('Onboarding required')
+    }
+    if (profile.role !== 'teacher') {
+      throw new Error('Only teachers can use this')
+    }
+    return true
+  },
+})
+
 export const getDocumentForAction = internalQuery({
   args: {
     documentId: v.id('prepDocuments'),
