@@ -279,7 +279,7 @@ function RoleOption({
       className={`flex cursor-pointer gap-3 border p-4 transition ${
         checked
           ? 'border-[var(--amber)] bg-[#f8efd8] text-[var(--charcoal)]'
-          : 'border-[var(--line)] bg-[var(--surface-strong)] text-[var(--charcoal-soft)] hover:border-[var(--line-strong)]'
+          : 'border-[var(--line-strong)] bg-[var(--surface-strong)] text-[var(--charcoal)] hover:border-[var(--amber)]'
       }`}
     >
       <input
@@ -290,9 +290,13 @@ function RoleOption({
         type="radio"
       />
       <span className="mt-0.5 text-[var(--amber)]">{icon}</span>
-      <span>
+      <span className="min-w-0">
         <span className="block text-sm font-semibold">{label}</span>
-        <span className="mt-1 block text-xs leading-5 text-[var(--muted)]">
+        <span
+          className={`mt-1 block text-xs leading-5 ${
+            checked ? 'text-[var(--sepia)]' : 'text-[var(--charcoal-muted)]'
+          }`}
+        >
           {description}
         </span>
       </span>
