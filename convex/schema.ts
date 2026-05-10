@@ -15,12 +15,16 @@ export default defineSchema({
     code: v.string(),
     title: v.optional(v.string()),
     status: v.union(
+      v.literal('not_started'),
       v.literal('active'),
+      v.literal('stopped'),
       v.literal('ended'),
       v.literal('deleted'),
     ),
     expiresAt: v.number(),
     createdAt: v.number(),
+    startedAt: v.optional(v.number()),
+    stoppedAt: v.optional(v.number()),
     endedAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
   })

@@ -14,6 +14,7 @@ import type { UserIdentity } from 'convex/server'
 
 const SESSION_DURATION_MS = 6 * 60 * 60 * 1000
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+const JOINABLE_SESSION_STATUSES = new Set(['not_started', 'active', 'stopped'])
 
 const PILLARS_CONFIG = {
   scenario:
@@ -48,6 +49,16 @@ function displayNameFromIdentity(identity: {
   nickname?: string
 }) {
   return identity.name || identity.nickname || identity.email || 'Participant'
+}
+
+function isJoinableSessionStatus(status: Doc<'sessions'>['status']) {
+  return JOINABLE_SESSION_STATUSES.has(status)
+}
+
+function assertSessionIsActive(session: Doc<'sessions'>) {
+  if (session.status !== 'active') {
+    throw new Error('Class is not active')
+  }
 }
 
 async function requireProfile(
@@ -116,7 +127,9 @@ async function assertCanAccessSession(
   const participant = await ctx.db
     .query('sessionParticipants')
     .withIndex('by_sessionId_and_studentTokenIdentifier', (q) =>
-      q.eq('sessionId', sessionId).eq('studentTokenIdentifier', tokenIdentifier),
+      q
+        .eq('sessionId', sessionId)
+        .eq('studentTokenIdentifier', tokenIdentifier),
     )
     .unique()
   if (!participant) {
@@ -204,8 +217,12 @@ export const createSession = mutation({
       const existing = await ctx.db
         .query('sessions')
         .withIndex('by_code', (q) => q.eq('code', code))
-        .first()
-      if (!existing || existing.status !== 'active') break
+        .collect()
+      if (
+        !existing.some((session) => isJoinableSessionStatus(session.status))
+      ) {
+        break
+      }
       code = makeCode()
     }
 
@@ -214,7 +231,7 @@ export const createSession = mutation({
       teacherName: profile.displayName,
       code,
       title: args.title || 'Pillars of Support Live Session',
-      status: 'active',
+      status: 'not_started',
       expiresAt: now + SESSION_DURATION_MS,
       createdAt: now,
     })
@@ -223,7 +240,7 @@ export const createSession = mutation({
       sessionId,
       type: 'pillars',
       title: 'Pillars of Support: School Uniforms',
-      status: 'open',
+      status: 'closed',
       config: PILLARS_CONFIG,
       createdAt: now,
     })
@@ -237,15 +254,23 @@ export const listMyTeacherSessions = query({
   handler: async (ctx) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
     await requireProfileRole(ctx, identity, 'teacher')
-    return await ctx.db
-      .query('sessions')
-      .withIndex('by_teacherTokenIdentifier_and_status', (q) =>
-        q
-          .eq('teacherTokenIdentifier', identity.tokenIdentifier)
-          .eq('status', 'active'),
-      )
-      .order('desc')
-      .take(10)
+    const sessionsByStatus = await Promise.all(
+      (['not_started', 'active', 'stopped', 'ended'] as const).map((status) =>
+        ctx.db
+          .query('sessions')
+          .withIndex('by_teacherTokenIdentifier_and_status', (q) =>
+            q
+              .eq('teacherTokenIdentifier', identity.tokenIdentifier)
+              .eq('status', status),
+          )
+          .order('desc')
+          .take(10),
+      ),
+    )
+    return sessionsByStatus
+      .flat()
+      .sort((left, right) => right.createdAt - left.createdAt)
+      .slice(0, 20)
   },
 })
 
@@ -268,12 +293,15 @@ export const joinSessionByCode = mutation({
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
     const profile = await requireProfileRole(ctx, identity, 'student')
     const normalizedCode = args.code.trim().toUpperCase()
-    const session = await ctx.db
+    const sessions = await ctx.db
       .query('sessions')
       .withIndex('by_code', (q) => q.eq('code', normalizedCode))
-      .first()
+      .collect()
+    const session = sessions.find((candidate) =>
+      isJoinableSessionStatus(candidate.status),
+    )
 
-    if (!session || session.status !== 'active') {
+    if (!session) {
       throw new Error('Session code is not active')
     }
     if (session.expiresAt < Date.now()) {
@@ -304,8 +332,7 @@ export const joinSessionByCode = mutation({
     const participantId = await ctx.db.insert('sessionParticipants', {
       sessionId: session._id,
       studentTokenIdentifier: identity.tokenIdentifier,
-      displayName:
-        args.displayName?.trim() || profile.displayName || 'Student',
+      displayName: args.displayName?.trim() || profile.displayName || 'Student',
       joinedAt: Date.now(),
       lastSeenAt: Date.now(),
     })
@@ -376,6 +403,7 @@ export const sendMessage = mutation({
       args.sessionId,
       identity.tokenIdentifier,
     )
+    assertSessionIsActive(access.session)
     const body = args.body.trim()
     if (!body) {
       throw new Error('Message cannot be empty')
@@ -424,6 +452,7 @@ export const submitPillarsExercise = mutation({
     if (access.role !== 'student') {
       throw new Error('Only students can submit assessments')
     }
+    assertSessionIsActive(access.session)
     validatePillarsPayload(args.payload)
     const existing = await ctx.db
       .query('activitySubmissions')
@@ -477,8 +506,91 @@ export const endSession = mutation({
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
     await requireProfileRole(ctx, identity, 'teacher')
-    await assertTeacherOwnsSession(ctx, args.sessionId, identity.tokenIdentifier)
-    await ctx.db.patch(args.sessionId, { status: 'ended', endedAt: Date.now() })
+    const session = await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    if (session.status === 'ended') {
+      return null
+    }
+    const now = Date.now()
+    await ctx.db.patch(args.sessionId, { status: 'ended', endedAt: now })
+    const activities = await ctx.db
+      .query('activities')
+      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
+      .collect()
+    await Promise.all(
+      activities.map((activity) =>
+        ctx.db.patch(activity._id, { status: 'closed' }),
+      ),
+    )
+    return null
+  },
+})
+
+export const startSession = mutation({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
+    const session = await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    if (session.status === 'ended') {
+      throw new Error('Ended classes cannot be restarted')
+    }
+    if (session.status === 'active') {
+      return null
+    }
+    const now = Date.now()
+    await ctx.db.patch(args.sessionId, {
+      status: 'active',
+      startedAt: session.startedAt || now,
+    })
+    const activities = await ctx.db
+      .query('activities')
+      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
+      .collect()
+    await Promise.all(
+      activities.map((activity) =>
+        ctx.db.patch(activity._id, { status: 'open' }),
+      ),
+    )
+    return null
+  },
+})
+
+export const stopSession = mutation({
+  args: { sessionId: v.id('sessions') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireProfileRole(ctx, identity, 'teacher')
+    const session = await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    if (session.status === 'ended') {
+      throw new Error('Ended classes cannot be stopped')
+    }
+    if (session.status !== 'active') {
+      return null
+    }
+    const now = Date.now()
+    await ctx.db.patch(args.sessionId, { status: 'stopped', stoppedAt: now })
+    const activities = await ctx.db
+      .query('activities')
+      .withIndex('by_sessionId', (q) => q.eq('sessionId', args.sessionId))
+      .collect()
+    await Promise.all(
+      activities.map((activity) =>
+        ctx.db.patch(activity._id, { status: 'closed' }),
+      ),
+    )
+    return null
   },
 })
 
@@ -487,7 +599,11 @@ export const deleteSession = mutation({
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
     await requireProfileRole(ctx, identity, 'teacher')
-    await assertTeacherOwnsSession(ctx, args.sessionId, identity.tokenIdentifier)
+    await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
     const now = Date.now()
     await ctx.db.patch(args.sessionId, {
       status: 'deleted',
@@ -502,7 +618,14 @@ export const seedDemoSession = mutation({
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
     await requireProfileRole(ctx, identity, 'teacher')
-    await assertTeacherOwnsSession(ctx, args.sessionId, identity.tokenIdentifier)
+    const session = await assertTeacherOwnsSession(
+      ctx,
+      args.sessionId,
+      identity.tokenIdentifier,
+    )
+    if (session.status === 'ended') {
+      throw new Error('Ended classes cannot be changed')
+    }
     const activity = await ctx.db
       .query('activities')
       .withIndex('by_sessionId_and_type', (q) =>
@@ -545,14 +668,35 @@ export const seedDemoSession = mutation({
     }
 
     const messages = [
-      ['Maya', 'I understand the principal has formal authority, but who actually enforces uniforms day to day?'],
+      [
+        'Maya',
+        'I understand the principal has formal authority, but who actually enforces uniforms day to day?',
+      ],
       ['Omar', 'Are parents a pillar, or only if they are organized somehow?'],
-      ['Leila', 'It seems like school tradition matters, but I am not sure if tradition counts as a pillar.'],
-      ['Sam', 'Why not start with the school board if they can change the policy directly?'],
-      ['Iris', 'Teachers feel accessible, but they may not have the most power.'],
-      ['Niko', 'The uniform supplier seems easy to miss because they are outside the school.'],
-      ['Ana', 'I am confused about the difference between influence and importance.'],
-      ['Dev', 'Students are affected most, but maybe they are not organized enough yet.'],
+      [
+        'Leila',
+        'It seems like school tradition matters, but I am not sure if tradition counts as a pillar.',
+      ],
+      [
+        'Sam',
+        'Why not start with the school board if they can change the policy directly?',
+      ],
+      [
+        'Iris',
+        'Teachers feel accessible, but they may not have the most power.',
+      ],
+      [
+        'Niko',
+        'The uniform supplier seems easy to miss because they are outside the school.',
+      ],
+      [
+        'Ana',
+        'I am confused about the difference between influence and importance.',
+      ],
+      [
+        'Dev',
+        'Students are affected most, but maybe they are not organized enough yet.',
+      ],
     ]
 
     for (const [index, [name, body]] of messages.entries()) {
@@ -570,7 +714,8 @@ export const seedDemoSession = mutation({
     const submissions = [
       {
         name: 'Maya',
-        decisionMaker: 'The principal and the district administration together.',
+        decisionMaker:
+          'The principal and the district administration together.',
         pillars: [
           ['Principal', 5, 2],
           ['Teachers', 4, 4],
@@ -808,13 +953,17 @@ function fallbackAnalysis(input: AnalysisInput) {
     const allText = [
       submission.powerHolder,
       names,
-      submission.moves.map((move) => `${move.pillarName} ${move.why}`).join(' '),
+      submission.moves
+        .map((move) => `${move.pillarName} ${move.why}`)
+        .join(' '),
       submission.reflection,
     ]
       .join(' ')
       .toLowerCase()
     const flags = new Set<string>()
-    if (/\beveryone\b|\bsociety\b|\bthe system\b/.test(submission.powerHolder)) {
+    if (
+      /\beveryone\b|\bsociety\b|\bthe system\b/.test(submission.powerHolder)
+    ) {
       flags.add('RF-01')
     }
     if (/expensive|unfair|comfort|freedom|problem/.test(names)) {
@@ -877,9 +1026,14 @@ function fallbackAnalysis(input: AnalysisInput) {
         ? 'Several students are separating importance from accessibility, but the distinction still needs reinforcement.'
         : 'No major repeated confusion has appeared yet.',
     ],
-    recurringQuestions: questionMessages.slice(0, 3).map((message) => message.body),
+    recurringQuestions: questionMessages
+      .slice(0, 3)
+      .map((message) => message.body),
     unclearConcepts: mentionsConfusion.length
-      ? ['Difference between social functions and organized institutions', 'Importance vs. accessibility']
+      ? [
+          'Difference between social functions and organized institutions',
+          'Importance vs. accessibility',
+        ]
       : ['No strong repeated confusion yet'],
     emotionalTone: {
       label: messages.length > 6 ? 'Engaged and analytical' : 'Warming up',
@@ -926,7 +1080,9 @@ function fallbackAnalysis(input: AnalysisInput) {
       consensus: common,
       gaps:
         pillarNames.length > 0
-          ? ['Commercial interests and informal enforcement roles may be underrepresented.']
+          ? [
+              'Commercial interests and informal enforcement roles may be underrepresented.',
+            ]
           : ['Waiting for Pillars submissions.'],
       sequencing:
         'Students tend to name formal authority first; use the debrief to test whether accessibility should change the first approach.',
@@ -958,47 +1114,55 @@ function rubricLabel(code: string) {
 async function openRouterAnalysis(input: AnalysisInput) {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
-    return { output: fallbackAnalysis(input), error: 'OPENROUTER_API_KEY is not set' }
+    return {
+      output: fallbackAnalysis(input),
+      error: 'OPENROUTER_API_KEY is not set',
+    }
   }
 
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      'HTTP-Referer': 'https://tarkus.local',
-      'X-Title': 'TARKUS',
+  const response = await fetch(
+    'https://openrouter.ai/api/v1/chat/completions',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://tarkus.local',
+        'X-Title': 'TARKUS',
+      },
+      body: JSON.stringify({
+        model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are TARKUS, a teacher-only AI synthesis layer for an in-person strategic nonviolence class. Students never see your output. Do not grade students. Do not give advice to students. Help the trainer understand class-level patterns only. Analyze the Pillars of Support school-uniform exercise using these trainer rubric flags: RF-01 monolithic model, RF-03 confusing power with grievance, RF-04 confusing pillars with tactics, RF-06 missing non-obvious pillars, RF-07 push vs pull, RF-08 all pillars equal, RF-09 awareness campaign as strategy, RF-10 moral framing, SK-08 prior experience or repression concern rather than conceptual confusion. Return JSON only. Required shape: {"teacherBrief":["string"],"recurringQuestions":["string"],"unclearConcepts":["string"],"emotionalTone":{"label":"string","explanation":"string"},"chatClusters":[{"label":"string","count":number}],"readiness":{"readyCount":number,"totalCount":number,"recommendation":"ADVANCE|RETEACH_ONE_CONCEPT|FULL_RETEACH"},"commonErrors":[{"code":"string","label":"string","count":number}],"strongestResponse":{"studentLabel":"string","step":"string","reason":"string"},"collectiveBlindSpot":"string","trainerDebriefPrompt":"string","pillarsInsights":{"consensus":["string"],"gaps":["string"],"sequencing":"string"}}. If more than 40 percent of submissions show the same foundational error RF-01 through RF-04, recommend FULL_RETEACH. Do not return markdown, prose outside JSON, or strings where arrays are required.',
+          },
+          {
+            role: 'user',
+            content: JSON.stringify({
+              session: {
+                title: input.session.title,
+                code: input.session.code,
+              },
+              chatMessages: input.messages.map((message) => ({
+                authorRole: message.authorRole,
+                displayName: message.isAnonymous
+                  ? 'Anonymous'
+                  : message.displayName,
+                body: message.body,
+              })),
+              pillarsSubmissions: input.submissions.map((submission) => ({
+                displayName: submission.displayName,
+                payload: submission.payload,
+              })),
+            }),
+          },
+        ],
+      }),
     },
-    body: JSON.stringify({
-      model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are TARKUS, a teacher-only AI synthesis layer for an in-person strategic nonviolence class. Students never see your output. Do not grade students. Do not give advice to students. Help the trainer understand class-level patterns only. Analyze the Pillars of Support school-uniform exercise using these trainer rubric flags: RF-01 monolithic model, RF-03 confusing power with grievance, RF-04 confusing pillars with tactics, RF-06 missing non-obvious pillars, RF-07 push vs pull, RF-08 all pillars equal, RF-09 awareness campaign as strategy, RF-10 moral framing, SK-08 prior experience or repression concern rather than conceptual confusion. Return JSON only. Required shape: {"teacherBrief":["string"],"recurringQuestions":["string"],"unclearConcepts":["string"],"emotionalTone":{"label":"string","explanation":"string"},"chatClusters":[{"label":"string","count":number}],"readiness":{"readyCount":number,"totalCount":number,"recommendation":"ADVANCE|RETEACH_ONE_CONCEPT|FULL_RETEACH"},"commonErrors":[{"code":"string","label":"string","count":number}],"strongestResponse":{"studentLabel":"string","step":"string","reason":"string"},"collectiveBlindSpot":"string","trainerDebriefPrompt":"string","pillarsInsights":{"consensus":["string"],"gaps":["string"],"sequencing":"string"}}. If more than 40 percent of submissions show the same foundational error RF-01 through RF-04, recommend FULL_RETEACH. Do not return markdown, prose outside JSON, or strings where arrays are required.',
-        },
-        {
-          role: 'user',
-          content: JSON.stringify({
-            session: {
-              title: input.session.title,
-              code: input.session.code,
-            },
-            chatMessages: input.messages.map((message) => ({
-              authorRole: message.authorRole,
-              displayName: message.isAnonymous ? 'Anonymous' : message.displayName,
-              body: message.body,
-            })),
-            pillarsSubmissions: input.submissions.map((submission) => ({
-              displayName: submission.displayName,
-              payload: submission.payload,
-            })),
-          }),
-        },
-      ],
-    }),
-  })
+  )
 
   if (!response.ok) {
     return {
@@ -1009,12 +1173,18 @@ async function openRouterAnalysis(input: AnalysisInput) {
   const json = await response.json()
   const content = json.choices?.[0]?.message?.content
   if (!content) {
-    return { output: fallbackAnalysis(input), error: 'OpenRouter returned no content' }
+    return {
+      output: fallbackAnalysis(input),
+      error: 'OpenRouter returned no content',
+    }
   }
   try {
     return { output: JSON.parse(content) }
   } catch {
-    return { output: fallbackAnalysis(input), error: 'OpenRouter returned invalid JSON' }
+    return {
+      output: fallbackAnalysis(input),
+      error: 'OpenRouter returned invalid JSON',
+    }
   }
 }
 
@@ -1022,10 +1192,13 @@ export const analyzeSession = action({
   args: { sessionId: v.id('sessions') },
   handler: async (ctx, args) => {
     const identity = requireIdentity(await ctx.auth.getUserIdentity())
-    const input: AnalysisInput = await ctx.runQuery(internal.sessions.getAnalysisInput, {
-      sessionId: args.sessionId,
-      teacherTokenIdentifier: identity.tokenIdentifier,
-    })
+    const input: AnalysisInput = await ctx.runQuery(
+      internal.sessions.getAnalysisInput,
+      {
+        sessionId: args.sessionId,
+        teacherTokenIdentifier: identity.tokenIdentifier,
+      },
+    )
     const { output, error } = await openRouterAnalysis(input)
     const analysisId: Id<'aiAnalyses'> = await ctx.runMutation(
       internal.sessions.saveAnalysis,

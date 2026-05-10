@@ -20,10 +20,13 @@ import { CSS } from '@dnd-kit/utilities'
 import { createFileRoute } from '@tanstack/react-router'
 import { useMutation, useQuery } from 'convex/react'
 import {
+  AlertCircle,
   CheckCircle2,
   Circle,
+  Clock,
   GripVertical,
   Landmark,
+  Lock,
   MessageCircle,
   Plus,
   Send,
@@ -48,10 +51,8 @@ import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { Textarea } from '../../components/ui/textarea'
 import { api } from '../../../convex/_generated/api'
-import type { Id } from '../../../convex/_generated/dataModel'
-import {
-  SCHOOL_UNIFORM_SCENARIO,
-} from '../../lib/tarkus'
+import type { Doc, Id } from '../../../convex/_generated/dataModel'
+import { SCHOOL_UNIFORM_SCENARIO } from '../../lib/tarkus'
 import type { PillarV2, PillarsPayloadV2 } from '../../lib/tarkus'
 
 export const Route = createFileRoute('/student/$sessionId')({
@@ -59,6 +60,7 @@ export const Route = createFileRoute('/student/$sessionId')({
 })
 
 type MoveReasons = Partial<Record<string, string>>
+type SessionStatus = Doc<'sessions'>['status']
 
 function StudentRoute() {
   return (
@@ -66,6 +68,44 @@ function StudentRoute() {
       <StudentSession />
     </AuthGate>
   )
+}
+
+function getStudentStatusMeta(status: SessionStatus) {
+  switch (status) {
+    case 'not_started':
+      return {
+        icon: Clock,
+        title: 'Waiting for teacher to start class',
+        description:
+          'You are in the room. Chat and the exercise will unlock when class starts.',
+      }
+    case 'active':
+      return {
+        icon: CheckCircle2,
+        title: 'Class is live',
+        description: 'Chat and the Pillars exercise are open.',
+      }
+    case 'stopped':
+      return {
+        icon: Lock,
+        title: 'Teacher has stopped the class',
+        description:
+          'Stay on this page. Work is paused until the teacher starts again.',
+      }
+    case 'ended':
+      return {
+        icon: AlertCircle,
+        title: 'Class has ended',
+        description:
+          'This class is now read-only. Your teacher can still review what happened.',
+      }
+    default:
+      return {
+        icon: AlertCircle,
+        title: 'Class unavailable',
+        description: 'This class is no longer available.',
+      }
+  }
 }
 
 function StudentSession() {
@@ -98,18 +138,20 @@ function StudentSession() {
   )
 
   const activity = sessionData?.activity
+  const isClassActive = sessionData?.session.status === 'active'
   const firstMoves = pillars.slice(0, 3)
   const canSubmit = Boolean(
+    isClassActive &&
     activity &&
-      powerHolder.trim() &&
-      pillars.length >= 3 &&
-      firstMoves.every((pillar) => moveReasons[pillar.id]?.trim()) &&
-      reflection.trim(),
+    powerHolder.trim() &&
+    pillars.length >= 3 &&
+    firstMoves.every((pillar) => moveReasons[pillar.id]?.trim()) &&
+    reflection.trim(),
   )
 
   async function handleSend(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!message.trim()) return
+    if (!isClassActive || !message.trim()) return
     setIsSending(true)
     try {
       await sendMessage({
@@ -124,6 +166,7 @@ function StudentSession() {
   }
 
   function addPillar() {
+    if (!isClassActive) return
     const name = pillarName.trim()
     if (!name || pillars.length >= 10) return
     setPillars((current) => [
@@ -140,6 +183,7 @@ function StudentSession() {
   }
 
   function updatePillar(id: string, patch: Partial<PillarV2>) {
+    if (!isClassActive) return
     setPillars((current) =>
       current.map((pillar) =>
         pillar.id === id ? { ...pillar, ...patch } : pillar,
@@ -148,6 +192,7 @@ function StudentSession() {
   }
 
   function removePillar(id: string) {
+    if (!isClassActive) return
     setPillars((current) => current.filter((pillar) => pillar.id !== id))
     setMoveReasons((current) => {
       const next = { ...current }
@@ -157,6 +202,7 @@ function StudentSession() {
   }
 
   function handleDragEnd(event: DragEndEvent) {
+    if (!isClassActive) return
     const { active, over } = event
     if (!over || active.id === over.id) return
     setPillars((current) => {
@@ -167,7 +213,7 @@ function StudentSession() {
   }
 
   async function handleSubmit() {
-    if (!activity || !canSubmit) return
+    if (!isClassActive || !activity || !canSubmit) return
     setError(null)
     const payload: PillarsPayloadV2 = {
       version: 2,
@@ -224,6 +270,9 @@ function StudentSession() {
     )
   }
 
+  const statusMeta = getStudentStatusMeta(sessionData.session.status)
+  const StatusIcon = statusMeta.icon
+
   return (
     <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-3 py-4">
       <section className="mx-auto grid w-full max-w-7xl gap-4 xl:grid-cols-[1fr_340px]">
@@ -242,6 +291,17 @@ function StudentSession() {
                 <Sparkles className="h-3.5 w-3.5" />
                 Structured checkpoint
               </Badge>
+            </div>
+            <div className="mt-4 flex items-start gap-3 rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3">
+              <StatusIcon className="mt-0.5 h-4 w-4 text-[var(--amber-deep)]" />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {statusMeta.title}
+                </p>
+                <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                  {statusMeta.description}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -286,18 +346,23 @@ function StudentSession() {
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
                   placeholder="Ask a question or say what is unclear..."
+                  disabled={!isClassActive}
                 />
                 <div className="flex items-center justify-between gap-3">
                   <Label className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Checkbox
                       checked={isAnonymous}
+                      disabled={!isClassActive}
                       onCheckedChange={(checked) =>
                         setIsAnonymous(checked === true)
                       }
                     />
                     Anonymous
                   </Label>
-                  <Button disabled={isSending || !message.trim()} type="submit">
+                  <Button
+                    disabled={isSending || !isClassActive || !message.trim()}
+                    type="submit"
+                  >
                     <Send className="h-4 w-4" />
                     Send
                   </Button>
@@ -321,6 +386,7 @@ function StudentSession() {
                 addPillar={addPillar}
                 handleDragEnd={handleDragEnd}
                 sensors={sensors}
+                isClassActive={isClassActive}
                 reflection={reflection}
                 setReflection={setReflection}
                 error={error}
@@ -381,6 +447,7 @@ function ExerciseTimeline({
   addPillar,
   handleDragEnd,
   sensors,
+  isClassActive,
   reflection,
   setReflection,
   error,
@@ -402,6 +469,7 @@ function ExerciseTimeline({
   addPillar: () => void
   handleDragEnd: (event: DragEndEvent) => void
   sensors: ReturnType<typeof useSensors>
+  isClassActive: boolean
   reflection: string
   setReflection: (value: string) => void
   error: string | null
@@ -437,6 +505,7 @@ function ExerciseTimeline({
           value={powerHolder}
           onChange={(event) => setPowerHolder(event.target.value)}
           placeholder="Example: the principal, district office, or school board..."
+          disabled={!isClassActive}
         />
       </Checkpoint>
 
@@ -456,12 +525,15 @@ function ExerciseTimeline({
               }
             }}
             placeholder="Teachers, PTA, district office..."
+            disabled={!isClassActive}
           />
           <Button
             size="icon"
             type="button"
             variant="outline"
-            disabled={!pillarName.trim() || pillars.length >= 10}
+            disabled={
+              !isClassActive || !pillarName.trim() || pillars.length >= 10
+            }
             onClick={addPillar}
           >
             <Plus className="h-4 w-4" />
@@ -485,6 +557,7 @@ function ExerciseTimeline({
                   rank={index + 1}
                   updatePillar={updatePillar}
                   removePillar={removePillar}
+                  disabled={!isClassActive}
                 />
               ))}
             </div>
@@ -528,6 +601,7 @@ function ExerciseTimeline({
                   }))
                 }
                 placeholder="Why approach this pillar at this point?"
+                disabled={!isClassActive}
               />
             </div>
           ))}
@@ -551,6 +625,7 @@ function ExerciseTimeline({
           value={reflection}
           onChange={(event) => setReflection(event.target.value)}
           placeholder="Example: I first thought the school board mattered most, but teachers are easier to reach..."
+          disabled={!isClassActive}
         />
       </Checkpoint>
 
@@ -568,7 +643,11 @@ function ExerciseTimeline({
         </Alert>
       ) : null}
 
-      <Button className="h-11 w-full" disabled={!canSubmit} onClick={handleSubmit}>
+      <Button
+        className="h-11 w-full"
+        disabled={!isClassActive || !canSubmit}
+        onClick={handleSubmit}
+      >
         Submit pillars exercise
       </Button>
     </div>
@@ -606,11 +685,13 @@ function SortablePillarCard({
   rank,
   updatePillar,
   removePillar,
+  disabled,
 }: {
   pillar: PillarV2
   rank: number
   updatePillar: (id: string, patch: Partial<PillarV2>) => void
   removePillar: (id: string) => void
+  disabled: boolean
 }) {
   const {
     attributes,
@@ -631,9 +712,7 @@ function SortablePillarCard({
       style={style}
       className={[
         'grid gap-3 rounded-xl border bg-[#fffdf8] p-3 shadow-sm md:grid-cols-[88px_1fr]',
-        isDragging
-          ? 'border-[var(--amber)] shadow-xl'
-          : 'border-[var(--line)]',
+        isDragging ? 'border-[var(--amber)] shadow-xl' : 'border-[var(--line)]',
       ].join(' ')}
     >
       <div className="flex items-center justify-between gap-2 md:block">
@@ -643,6 +722,7 @@ function SortablePillarCard({
           variant="ghost"
           size="icon-sm"
           className="md:mt-2"
+          disabled={disabled}
           {...attributes}
           {...listeners}
         >
@@ -657,11 +737,13 @@ function SortablePillarCard({
               updatePillar(pillar.id, { name: event.target.value })
             }
             className="font-semibold"
+            disabled={disabled}
           />
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
+            disabled={disabled}
             onClick={() => removePillar(pillar.id)}
           >
             <Trash2 className="h-4 w-4" />
@@ -672,6 +754,7 @@ function SortablePillarCard({
           onChange={(accessibility) =>
             updatePillar(pillar.id, { accessibility })
           }
+          disabled={disabled}
         />
         <Input
           value={pillar.role || ''}
@@ -679,6 +762,7 @@ function SortablePillarCard({
             updatePillar(pillar.id, { role: event.target.value })
           }
           placeholder="What role does this pillar play?"
+          disabled={disabled}
         />
       </div>
     </div>
@@ -700,9 +784,11 @@ function PillarIllustration({ rank }: { rank: number }) {
 function Rating({
   value,
   onChange,
+  disabled,
 }: {
   value: number
   onChange: (value: number) => void
+  disabled: boolean
 }) {
   return (
     <div>
@@ -719,6 +805,7 @@ function Rating({
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
         className="w-full accent-[var(--amber)]"
+        disabled={disabled}
       />
       <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
         <span>Hard</span>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import {
+  AlertTriangle,
   Bot,
   CircleDot,
   Clock,
@@ -9,8 +10,10 @@ import {
   Flag,
   LayoutDashboard,
   MessageSquareText,
+  Pause,
   Play,
   RefreshCw,
+  Square,
   Sparkles,
   Trash2,
   Users,
@@ -21,8 +24,17 @@ import { Alert, AlertDescription } from '../components/ui/alert'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../components/ui/dialog'
 import { api } from '../../convex/_generated/api'
-import type { Id } from '../../convex/_generated/dataModel'
+import type { Doc, Id } from '../../convex/_generated/dataModel'
 import {
   getAccessibilityPoints,
   getClassRubricSummary,
@@ -42,6 +54,8 @@ export const Route = createFileRoute('/teacher')({
   component: TeacherRoute,
 })
 
+type TeacherSession = Doc<'sessions'>
+
 function TeacherRoute() {
   return (
     <AuthGate requiredRole="teacher" title="Sign in as teacher">
@@ -53,12 +67,16 @@ function TeacherRoute() {
 function TeacherDashboard() {
   const sessions = useQuery(api.sessions.listMyTeacherSessions)
   const createSession = useMutation(api.sessions.createSession)
+  const startSession = useMutation(api.sessions.startSession)
+  const stopSession = useMutation(api.sessions.stopSession)
+  const endSession = useMutation(api.sessions.endSession)
   const deleteSession = useMutation(api.sessions.deleteSession)
   const seedDemo = useMutation(api.sessions.seedDemoSession)
   const analyzeSession = useAction(api.sessions.analyzeSession)
   const [selectedSessionId, setSelectedSessionId] =
     useState<Id<'sessions'> | null>(null)
   const [busyAction, setBusyAction] = useState<string | null>(null)
+  const [endDialogOpen, setEndDialogOpen] = useState(false)
 
   const activeSessionId = selectedSessionId || sessions?.[0]?._id || null
   const session = useQuery(
@@ -98,6 +116,37 @@ function TeacherDashboard() {
     try {
       await seedDemo({ sessionId: activeSessionId })
       await analyzeSession({ sessionId: activeSessionId })
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  async function handleStart() {
+    if (!activeSessionId) return
+    setBusyAction('start')
+    try {
+      await startSession({ sessionId: activeSessionId })
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  async function handleStop() {
+    if (!activeSessionId) return
+    setBusyAction('stop')
+    try {
+      await stopSession({ sessionId: activeSessionId })
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  async function handleEnd() {
+    if (!activeSessionId) return
+    setBusyAction('end')
+    try {
+      await endSession({ sessionId: activeSessionId })
+      setEndDialogOpen(false)
     } finally {
       setBusyAction(null)
     }
@@ -163,12 +212,23 @@ function TeacherDashboard() {
     <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-4 py-6">
       <section className="mx-auto grid w-full max-w-7xl gap-4 xl:grid-cols-[1fr_360px]">
         <div className="space-y-4">
+          {sessions.length > 1 ? (
+            <SessionPicker
+              sessions={sessions}
+              selectedSessionId={activeSessionId}
+              onSelect={setSelectedSessionId}
+            />
+          ) : null}
           <SessionHeader
             code={session.code}
+            status={session.status}
             expiresAt={session.expiresAt}
             participantCount={participants?.length || 0}
             submissionCount={submissions?.length || 0}
             busyAction={busyAction}
+            onStart={handleStart}
+            onStop={handleStop}
+            onRequestEnd={() => setEndDialogOpen(true)}
             onAnalyze={handleAnalyze}
             onSeed={handleSeedAndAnalyze}
             onDelete={handleDelete}
@@ -177,7 +237,9 @@ function TeacherDashboard() {
             <AiPanel
               analysis={analysis}
               error={latestAnalysis?.error}
-              analyzedSubmissionCount={latestAnalysis?.inputCursor.submissionCount}
+              analyzedSubmissionCount={
+                latestAnalysis?.inputCursor.submissionCount
+              }
               currentSubmissionCount={submissions?.length || 0}
             />
             <PillarsPanel submissions={submissions || []} />
@@ -189,6 +251,31 @@ function TeacherDashboard() {
           <ChatPanel messages={messages || []} />
         </aside>
       </section>
+      <Dialog open={endDialogOpen} onOpenChange={setEndDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>End this class?</DialogTitle>
+            <DialogDescription>
+              Ending a class is final. Students will no longer be able to chat
+              or submit work, but the teacher dashboard will keep the class
+              available for review until you delete it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              disabled={busyAction === 'end'}
+              onClick={handleEnd}
+            >
+              <AlertTriangle className="h-4 w-4" />
+              End class
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   )
 }
@@ -201,21 +288,108 @@ function LoadingSurface() {
   )
 }
 
+function getSessionStatusMeta(status: TeacherSession['status']) {
+  switch (status) {
+    case 'not_started':
+      return {
+        label: 'Waiting to start',
+        description: 'Students can join, but class work is locked.',
+        className: 'bg-amber-50 text-amber-800 hover:bg-amber-50',
+      }
+    case 'active':
+      return {
+        label: 'Live class',
+        description: 'Students can chat and submit work.',
+        className: 'bg-emerald-50 text-emerald-700 hover:bg-emerald-50',
+      }
+    case 'stopped':
+      return {
+        label: 'Stopped',
+        description: 'Students remain joined, but class work is paused.',
+        className: 'bg-slate-100 text-slate-700 hover:bg-slate-100',
+      }
+    case 'ended':
+      return {
+        label: 'Ended',
+        description: 'Class is read-only and available for review.',
+        className: 'bg-zinc-100 text-zinc-700 hover:bg-zinc-100',
+      }
+    default:
+      return {
+        label: 'Deleted',
+        description: 'Class is hidden.',
+        className: 'bg-muted text-muted-foreground hover:bg-muted',
+      }
+  }
+}
+
+function SessionPicker({
+  sessions,
+  selectedSessionId,
+  onSelect,
+}: {
+  sessions: Array<TeacherSession>
+  selectedSessionId: Id<'sessions'> | null
+  onSelect: (sessionId: Id<'sessions'>) => void
+}) {
+  return (
+    <Card>
+      <CardContent className="flex gap-2 overflow-x-auto p-3">
+        {sessions.map((session) => {
+          const meta = getSessionStatusMeta(session.status)
+          const isSelected = session._id === selectedSessionId
+          return (
+            <button
+              key={session._id}
+              className={[
+                'min-w-56 rounded-lg border px-3 py-2 text-left transition-colors',
+                isSelected
+                  ? 'border-primary bg-primary/5'
+                  : 'border-[var(--line)] bg-background hover:bg-muted/60',
+              ].join(' ')}
+              type="button"
+              onClick={() => onSelect(session._id)}
+            >
+              <span className="block truncate text-sm font-semibold text-foreground">
+                {session.title || 'Pillars class'}
+              </span>
+              <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="font-mono tracking-[0.12em]">
+                  {session.code}
+                </span>
+                <span>{meta.label}</span>
+              </span>
+            </button>
+          )
+        })}
+      </CardContent>
+    </Card>
+  )
+}
+
 function SessionHeader({
   code,
+  status,
   expiresAt,
   participantCount,
   submissionCount,
   busyAction,
+  onStart,
+  onStop,
+  onRequestEnd,
   onAnalyze,
   onSeed,
   onDelete,
 }: {
   code: string
+  status: TeacherSession['status']
   expiresAt: number
   participantCount: number
   submissionCount: number
   busyAction: string | null
+  onStart: () => void
+  onStop: () => void
+  onRequestEnd: () => void
   onAnalyze: () => void
   onSeed: () => void
   onDelete: () => void
@@ -224,6 +398,10 @@ function SessionHeader({
     hour: 'numeric',
     minute: '2-digit',
   })
+  const statusMeta = getSessionStatusMeta(status)
+  const canStart = status === 'not_started' || status === 'stopped'
+  const canStop = status === 'active'
+  const canEnd = status !== 'ended'
 
   return (
     <Card>
@@ -231,9 +409,9 @@ function SessionHeader({
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge className="gap-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
+              <Badge className={`gap-1.5 ${statusMeta.className}`}>
                 <CircleDot className="h-3.5 w-3.5" />
-                Live session
+                {statusMeta.label}
               </Badge>
               <Badge variant="secondary" className="gap-1.5">
                 <Clock className="h-3.5 w-3.5" />
@@ -259,6 +437,9 @@ function SessionHeader({
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {statusMeta.description}
+            </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -268,6 +449,32 @@ function SessionHeader({
               label="submitted"
               value={submissionCount}
             />
+            {canStart ? (
+              <Button disabled={busyAction === 'start'} onClick={onStart}>
+                <Play className="h-4 w-4" />
+                Start
+              </Button>
+            ) : null}
+            {canStop ? (
+              <Button
+                variant="outline"
+                disabled={busyAction === 'stop'}
+                onClick={onStop}
+              >
+                <Pause className="h-4 w-4" />
+                Stop
+              </Button>
+            ) : null}
+            {canEnd ? (
+              <Button
+                variant="destructive"
+                disabled={busyAction === 'end'}
+                onClick={onRequestEnd}
+              >
+                <Square className="h-4 w-4" />
+                End class
+              </Button>
+            ) : null}
             <Button
               variant="outline"
               disabled={busyAction === 'seed'}
@@ -671,7 +878,10 @@ function PillarsPanel({
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {response.payload.moves.slice(0, 3).map((move) => (
-                      <Badge key={`${response.id}-${move.rank}`} variant="outline">
+                      <Badge
+                        key={`${response.id}-${move.rank}`}
+                        variant="outline"
+                      >
                         {move.rank}. {move.pillarName}
                       </Badge>
                     ))}
@@ -727,7 +937,9 @@ function AccessibilitySignal({
                       className="rounded-full px-2 py-1 text-xs font-semibold text-white"
                       style={{
                         backgroundColor:
-                          pillarColors[(index + pointIndex) % pillarColors.length],
+                          pillarColors[
+                            (index + pointIndex) % pillarColors.length
+                          ],
                       }}
                     >
                       {point.rank ? `${point.rank}. ` : ''}
