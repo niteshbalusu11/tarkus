@@ -3,6 +3,7 @@ import type { UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
 import { api } from '../../convex/_generated/api'
+import type { Id } from '../../convex/_generated/dataModel'
 import {
   MAX_LLM_DOCUMENT_CONTEXT_CHARS,
   MAX_PREP_DOCUMENT_UPLOAD_BYTES,
@@ -46,6 +47,48 @@ async function onboard(
     displayName,
     role,
   })
+}
+
+async function createStoredPresentation(
+  t: ReturnType<typeof newTestBackend>,
+  workspaceId: Id<'prepWorkspaces'>,
+  status: 'generating' | 'ready' | 'failed' = 'ready',
+) {
+  const now = Date.now()
+  const curriculumId = await t.run(async (ctx) =>
+    ctx.db.insert('curricula', {
+      workspaceId,
+      teacherTokenIdentifier: teacherIdentity.tokenIdentifier,
+      version: 1,
+      status: 'finalized',
+      content: { title: 'Preview curriculum' },
+      createdAt: now,
+      updatedAt: now,
+    }),
+  )
+  return await t.run(async (ctx) =>
+    ctx.db.insert('presentations', {
+      workspaceId,
+      teacherTokenIdentifier: teacherIdentity.tokenIdentifier,
+      curriculumId,
+      status,
+      slideSpec: {
+        title: 'Pillars preview',
+        slides: [
+          {
+            type: 'title',
+            title: 'Pillars preview',
+            bullets: ['Read power by looking at support structures.'],
+            speakerNotes: 'Open by connecting the deck to the live class.',
+          },
+        ],
+      },
+      fileName: 'pillars-preview.pptx',
+      ...(status === 'failed' ? { error: 'Deck generation failed' } : {}),
+      createdAt: now,
+      updatedAt: now,
+    }),
+  )
 }
 
 describe('prep workspace auth', () => {
@@ -127,9 +170,12 @@ describe('prep workspace auth', () => {
       otherTeacher.query(api.prep.getWorkspace, { workspaceId }),
     ).rejects.toThrow('Unauthorized')
 
-    const prepForSession = await teacher.query(api.prep.getWorkspaceForSession, {
-      sessionId,
-    })
+    const prepForSession = await teacher.query(
+      api.prep.getWorkspaceForSession,
+      {
+        sessionId,
+      },
+    )
     expect(prepForSession.workspace?._id).toBe(workspaceId)
 
     const workspace = await teacher.query(api.prep.getWorkspace, {
@@ -166,6 +212,69 @@ describe('prep workspace auth', () => {
       workspaceId,
     })
     expect(workspace.prepBrief).toContain('El Salvador 1944')
+  })
+
+  it('scopes presentation previews to the owning teacher', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    const otherTeacher = t.withIdentity(otherTeacherIdentity)
+    const student = t.withIdentity(studentIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    await onboard(t, otherTeacherIdentity, 'teacher', 'Other Trainer')
+    await onboard(t, studentIdentity, 'student', 'Student')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {
+      title: 'Preview class',
+    })
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+    const presentationId = await createStoredPresentation(t, workspaceId)
+
+    await expect(
+      t.query(api.prep.getPresentationPreview, { presentationId }),
+    ).rejects.toThrow('Not authenticated')
+    await expect(
+      student.query(api.prep.getPresentationPreview, { presentationId }),
+    ).rejects.toThrow('Only teachers can use this')
+    await expect(
+      otherTeacher.query(api.prep.getPresentationPreview, { presentationId }),
+    ).rejects.toThrow('Unauthorized')
+
+    const preview = await teacher.query(api.prep.getPresentationPreview, {
+      presentationId,
+    })
+    expect(preview).toMatchObject({
+      _id: presentationId,
+      fileName: 'pillars-preview.pptx',
+      status: 'ready',
+      sessionTitle: 'Preview class',
+    })
+    expect(preview.slideSpec).toMatchObject({
+      title: 'Pillars preview',
+      slides: [{ title: 'Pillars preview' }],
+    })
+  })
+
+  it('returns failed presentation state for preview handling', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {})
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+    const presentationId = await createStoredPresentation(
+      t,
+      workspaceId,
+      'failed',
+    )
+
+    const preview = await teacher.query(api.prep.getPresentationPreview, {
+      presentationId,
+    })
+
+    expect(preview.status).toBe('failed')
+    expect(preview.error).toBe('Deck generation failed')
   })
 
   it('hides prep workspaces once their class is deleted', async () => {

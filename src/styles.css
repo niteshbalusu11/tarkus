@@ -287,14 +287,14 @@ body::after {
   box-shadow: 0 0 0 3px rgba(201, 146, 26, 0.18);
 }
 
-a {
+a:not([data-slot='button']) {
   color: var(--amber-deep);
   text-decoration-color: rgba(201, 146, 26, 0.45);
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
 
-a:hover {
+a:not([data-slot='button']):hover {
   color: var(--charcoal);
 }
 
@@ -353,7 +353,7 @@ pre code {
 
 button,
 .island-shell,
-a {
+a:not([data-slot='button']) {
   transition:
     background-color 180ms ease,
     color 180ms ease,

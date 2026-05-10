@@ -72,11 +72,10 @@ async function assertTeacherOwnsSession(
   return session
 }
 
-function getAssetKind(args: {
-  kind?: 'document' | 'image'
-  mimeType: string
-}) {
-  return args.kind || (args.mimeType.startsWith('image/') ? 'image' : 'document')
+function getAssetKind(args: { kind?: 'document' | 'image'; mimeType: string }) {
+  return (
+    args.kind || (args.mimeType.startsWith('image/') ? 'image' : 'document')
+  )
 }
 
 async function assertStoredFileWithinLimit(
@@ -286,7 +285,10 @@ export const listAssets = query({
     return await Promise.all(
       assets.map(async (asset) => ({
         ...asset,
-        url: asset.kind === 'image' ? await ctx.storage.getUrl(asset.storageId) : null,
+        url:
+          asset.kind === 'image'
+            ? await ctx.storage.getUrl(asset.storageId)
+            : null,
       })),
     )
   },
@@ -388,6 +390,58 @@ export const getPresentationDownloadUrl = query({
       return null
     }
     return await ctx.storage.getUrl(presentation.storageId)
+  },
+})
+
+export const getPresentationPreview = query({
+  args: { presentationId: v.id('presentations') },
+  handler: async (ctx, args) => {
+    const identity = requireIdentity(await ctx.auth.getUserIdentity())
+    await requireTeacherProfile(ctx, identity)
+    const presentation = await ctx.db.get(args.presentationId)
+    if (!presentation) {
+      throw new Error('Presentation not found')
+    }
+    const workspace = await assertTeacherOwnsWorkspace(
+      ctx,
+      presentation.workspaceId,
+      identity.tokenIdentifier,
+    )
+    const session = workspace.sessionId
+      ? await ctx.db.get(workspace.sessionId)
+      : null
+    const imageDocuments = await ctx.db
+      .query('prepDocuments')
+      .withIndex('by_workspaceId', (q) =>
+        q.eq('workspaceId', presentation.workspaceId),
+      )
+      .collect()
+    const imageUrls = await Promise.all(
+      imageDocuments
+        .filter(
+          (document) =>
+            document.kind === 'image' || document.mimeType.startsWith('image/'),
+        )
+        .map(async (document) => ({
+          fileName: document.fileName,
+          url: await ctx.storage.getUrl(document.storageId),
+        })),
+    )
+
+    return {
+      _id: presentation._id,
+      fileName: presentation.fileName,
+      status: presentation.status,
+      error: presentation.error,
+      slideSpec: presentation.slideSpec,
+      createdAt: presentation.createdAt,
+      workspaceTitle: workspace.title,
+      sessionTitle: session?.title || workspace.title,
+      imageUrls: imageUrls.filter(
+        (image): image is { fileName: string; url: string } =>
+          image.url !== null,
+      ),
+    }
   },
 })
 

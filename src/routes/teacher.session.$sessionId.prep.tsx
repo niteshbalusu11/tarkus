@@ -275,7 +275,10 @@ function PrepWorkspace() {
           </div>
           <div className="space-y-3 lg:w-[520px]">
             <div className="grid gap-2 sm:grid-cols-3">
-              <StatusTile label="Documents" value={`${documents?.length || 0}`} />
+              <StatusTile
+                label="Documents"
+                value={`${documents?.length || 0}`}
+              />
               <StatusTile label="Extracted" value={`${extractedCount}`} />
               <StatusTile label="Images" value={`${imageCount}`} />
             </div>
@@ -311,24 +314,24 @@ function PrepWorkspace() {
               <Sparkles className="h-4 w-4 text-[var(--amber-deep)]" />
               Class focus
             </h2>
-              <Textarea
-                className="min-h-36 bg-[#fffefa]"
-                value={prepBrief}
-                onChange={(event) => setPrepBrief(event.target.value)}
-              />
-              <Button
-                variant="outline"
-                className="h-10 w-full rounded-xl"
-                disabled={busy === 'brief'}
-                onClick={() => void savePrepBrief()}
-              >
-                {busy === 'brief' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <PenLine className="h-4 w-4" />
-                )}
-                Save focus
-              </Button>
+            <Textarea
+              className="min-h-36 bg-[#fffefa]"
+              value={prepBrief}
+              onChange={(event) => setPrepBrief(event.target.value)}
+            />
+            <Button
+              variant="outline"
+              className="h-10 w-full rounded-xl"
+              disabled={busy === 'brief'}
+              onClick={() => void savePrepBrief()}
+            >
+              {busy === 'brief' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <PenLine className="h-4 w-4" />
+              )}
+              Save focus
+            </Button>
           </section>
 
           <section className="space-y-4 border-b border-[var(--line)] py-5">
@@ -336,51 +339,51 @@ function PrepWorkspace() {
               <Upload className="h-4 w-4 text-[var(--amber-deep)]" />
               Source documents
             </h2>
-              <input
-                ref={fileInputRef}
-                className="hidden"
-                type="file"
-                multiple
-                accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,image/png,image/jpeg,image/webp"
-                onChange={(event) => void handleUpload(event.target.files)}
-              />
-              <Button
-                className="h-10 w-full rounded-xl"
-                disabled={busy === 'upload'}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {busy === 'upload' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Upload className="h-4 w-4" />
-                )}
-                Upload docs or images
-              </Button>
-              <DocumentList
-                busy={busy}
-                documents={documents || []}
-                onRetry={(documentId) =>
-                  void runAction('retry-extract', () =>
-                    extractDocumentText({ documentId }),
-                  )
-                }
-              />
-              <Button
-                className="h-10 w-full rounded-xl"
-                disabled={!extractedCount || busy === 'curriculum'}
-                onClick={() =>
-                  void runAction('curriculum', () =>
-                    generateCurriculum({ workspaceId: typedWorkspaceId }),
-                  )
-                }
-              >
-                {busy === 'curriculum' ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Sparkles className="h-4 w-4" />
-                )}
-                Generate curriculum
-              </Button>
+            <input
+              ref={fileInputRef}
+              className="hidden"
+              type="file"
+              multiple
+              accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown,image/png,image/jpeg,image/webp"
+              onChange={(event) => void handleUpload(event.target.files)}
+            />
+            <Button
+              className="h-10 w-full rounded-xl"
+              disabled={busy === 'upload'}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {busy === 'upload' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              Upload docs or images
+            </Button>
+            <DocumentList
+              busy={busy}
+              documents={documents || []}
+              onRetry={(documentId) =>
+                void runAction('retry-extract', () =>
+                  extractDocumentText({ documentId }),
+                )
+              }
+            />
+            <Button
+              className="h-10 w-full rounded-xl"
+              disabled={!extractedCount || busy === 'curriculum'}
+              onClick={() =>
+                void runAction('curriculum', () =>
+                  generateCurriculum({ workspaceId: typedWorkspaceId }),
+                )
+              }
+            >
+              {busy === 'curriculum' ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Generate curriculum
+            </Button>
           </section>
 
           <PresentationPanel
@@ -453,7 +456,9 @@ function PrepWorkspace() {
               />
               <Button
                 className="h-10 w-full rounded-xl bg-[var(--amber)] text-[var(--charcoal)] hover:bg-[var(--amber-pale)]"
-                disabled={!latestCurriculum || !instruction.trim() || busy === 'refine'}
+                disabled={
+                  !latestCurriculum || !instruction.trim() || busy === 'refine'
+                }
                 onClick={() => {
                   const nextInstruction = instruction
                   setInstruction('')
@@ -507,7 +512,8 @@ function DocumentList({
   if (!documents.length) {
     return (
       <div className="rounded-xl border border-dashed border-[var(--line-strong)] bg-[var(--paper)] p-3 text-sm leading-6 text-[var(--charcoal-muted)]">
-        Upload source files for the curriculum agent or images for the slide deck.
+        Upload source files for the curriculum agent or images for the slide
+        deck.
       </div>
     )
   }
@@ -519,7 +525,8 @@ function DocumentList({
           className="rounded-xl border border-[var(--line)] bg-[var(--paper)] p-3"
         >
           <div className="flex items-start gap-3">
-            {document.kind === 'image' || document.mimeType.startsWith('image/') ? (
+            {document.kind === 'image' ||
+            document.mimeType.startsWith('image/') ? (
               document.url ? (
                 <img
                   alt=""
@@ -549,7 +556,9 @@ function DocumentList({
                   variant="outline"
                   onClick={() => onRetry(document._id)}
                 >
-                  {busy === 'retry-extract' ? 'Retrying...' : 'Retry extraction'}
+                  {busy === 'retry-extract'
+                    ? 'Retrying...'
+                    : 'Retry extraction'}
                 </Button>
               ) : null}
             </div>
@@ -618,7 +627,11 @@ function CurriculumWorkspace({
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" disabled={busy === 'save'} onClick={() => void onSave()}>
+            <Button
+              variant="outline"
+              disabled={busy === 'save'}
+              onClick={() => void onSave()}
+            >
               {busy === 'save' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -627,7 +640,9 @@ function CurriculumWorkspace({
               Save edits
             </Button>
             <Button
-              disabled={curriculum.status === 'finalized' || busy === 'finalize'}
+              disabled={
+                curriculum.status === 'finalized' || busy === 'finalize'
+              }
               onClick={() => void onFinalize()}
             >
               {busy === 'finalize' ? (
@@ -661,11 +676,7 @@ function CurriculumWorkspace({
   )
 }
 
-function CurriculumReadView({
-  curriculum,
-}: {
-  curriculum: CurriculumContent
-}) {
+function CurriculumReadView({ curriculum }: { curriculum: CurriculumContent }) {
   return (
     <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_310px]">
       <div className="p-6">
@@ -1015,33 +1026,33 @@ function PresentationPanel({
         <Presentation className="h-4 w-4 text-[var(--amber-deep)]" />
         Presentation
       </h2>
-        <Button
-          variant="outline"
-          className="h-10 w-full rounded-xl"
-          disabled={!latestCurriculum || busy === 'presentation'}
-          onClick={() => void onGenerate()}
-        >
-          {busy === 'presentation' ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Presentation className="h-4 w-4" />
-          )}
-          Generate PowerPoint
-        </Button>
-        {presentations.length ? (
-          <div className="space-y-2">
-            {presentations.map((presentation) => (
-              <PresentationDownload
-                key={presentation._id}
-                presentation={presentation}
-              />
-            ))}
-          </div>
+      <Button
+        variant="outline"
+        className="h-10 w-full rounded-xl"
+        disabled={!latestCurriculum || busy === 'presentation'}
+        onClick={() => void onGenerate()}
+      >
+        {busy === 'presentation' ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
-          <p className="rounded-xl border border-dashed border-[var(--line-strong)] bg-[var(--paper)] p-3 text-sm leading-6 text-[var(--charcoal-muted)]">
-            Finalize the curriculum, then generate a PPTX deck.
-          </p>
+          <Presentation className="h-4 w-4" />
         )}
+        Generate PowerPoint
+      </Button>
+      {presentations.length ? (
+        <div className="space-y-2">
+          {presentations.map((presentation) => (
+            <PresentationDownload
+              key={presentation._id}
+              presentation={presentation}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-[var(--line-strong)] bg-[var(--paper)] p-3 text-sm leading-6 text-[var(--charcoal-muted)]">
+          Finalize the curriculum, then generate a PPTX deck.
+        </p>
+      )}
     </section>
   )
 }
@@ -1071,13 +1082,37 @@ function PresentationDownload({
           </p>
         </div>
       </div>
-      {downloadUrl ? (
-        <Button asChild className="mt-3 h-9 w-full rounded-xl" size="sm">
-          <a href={downloadUrl} download={presentation.fileName}>
-            <Download className="h-4 w-4" />
-            Download PPTX
-          </a>
-        </Button>
+      {presentation.status === 'ready' ? (
+        <div
+          className={[
+            'mt-3 grid gap-2',
+            downloadUrl ? 'sm:grid-cols-2' : '',
+          ].join(' ')}
+        >
+          <Button asChild className="h-9 rounded-xl" size="sm">
+            <a
+              href={`/teacher/presentation/${presentation._id}/preview`}
+              rel="noreferrer"
+              target="_blank"
+            >
+              <Presentation className="h-4 w-4" />
+              Preview
+            </a>
+          </Button>
+          {downloadUrl ? (
+            <Button
+              asChild
+              className="h-9 rounded-xl"
+              size="sm"
+              variant="outline"
+            >
+              <a href={downloadUrl} download={presentation.fileName}>
+                <Download className="h-4 w-4" />
+                Download
+              </a>
+            </Button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   )

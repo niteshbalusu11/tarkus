@@ -15,6 +15,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as TeacherPrepRouteImport } from './routes/teacher.prep'
 import { Route as StudentSessionIdRouteImport } from './routes/student/$sessionId'
 import { Route as TeacherSessionSessionIdPrepRouteImport } from './routes/teacher.session.$sessionId.prep'
+import { Route as TeacherPresentationPresentationIdPreviewRouteImport } from './routes/teacher.presentation.$presentationId.preview'
 
 const TeacherRoute = TeacherRouteImport.update({
   id: '/teacher',
@@ -47,6 +48,12 @@ const TeacherSessionSessionIdPrepRoute =
     path: '/session/$sessionId/prep',
     getParentRoute: () => TeacherRoute,
   } as any)
+const TeacherPresentationPresentationIdPreviewRoute =
+  TeacherPresentationPresentationIdPreviewRouteImport.update({
+    id: '/presentation/$presentationId/preview',
+    path: '/presentation/$presentationId/preview',
+    getParentRoute: () => TeacherRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByFullPath {
   '/teacher': typeof TeacherRouteWithChildren
   '/student/$sessionId': typeof StudentSessionIdRoute
   '/teacher/prep': typeof TeacherPrepRoute
+  '/teacher/presentation/$presentationId/preview': typeof TeacherPresentationPresentationIdPreviewRoute
   '/teacher/session/$sessionId/prep': typeof TeacherSessionSessionIdPrepRoute
 }
 export interface FileRoutesByTo {
@@ -62,6 +70,7 @@ export interface FileRoutesByTo {
   '/teacher': typeof TeacherRouteWithChildren
   '/student/$sessionId': typeof StudentSessionIdRoute
   '/teacher/prep': typeof TeacherPrepRoute
+  '/teacher/presentation/$presentationId/preview': typeof TeacherPresentationPresentationIdPreviewRoute
   '/teacher/session/$sessionId/prep': typeof TeacherSessionSessionIdPrepRoute
 }
 export interface FileRoutesById {
@@ -71,6 +80,7 @@ export interface FileRoutesById {
   '/teacher': typeof TeacherRouteWithChildren
   '/student/$sessionId': typeof StudentSessionIdRoute
   '/teacher/prep': typeof TeacherPrepRoute
+  '/teacher/presentation/$presentationId/preview': typeof TeacherPresentationPresentationIdPreviewRoute
   '/teacher/session/$sessionId/prep': typeof TeacherSessionSessionIdPrepRoute
 }
 export interface FileRouteTypes {
@@ -81,6 +91,7 @@ export interface FileRouteTypes {
     | '/teacher'
     | '/student/$sessionId'
     | '/teacher/prep'
+    | '/teacher/presentation/$presentationId/preview'
     | '/teacher/session/$sessionId/prep'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -89,6 +100,7 @@ export interface FileRouteTypes {
     | '/teacher'
     | '/student/$sessionId'
     | '/teacher/prep'
+    | '/teacher/presentation/$presentationId/preview'
     | '/teacher/session/$sessionId/prep'
   id:
     | '__root__'
@@ -97,6 +109,7 @@ export interface FileRouteTypes {
     | '/teacher'
     | '/student/$sessionId'
     | '/teacher/prep'
+    | '/teacher/presentation/$presentationId/preview'
     | '/teacher/session/$sessionId/prep'
   fileRoutesById: FileRoutesById
 }
@@ -151,16 +164,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TeacherSessionSessionIdPrepRouteImport
       parentRoute: typeof TeacherRoute
     }
+    '/teacher/presentation/$presentationId/preview': {
+      id: '/teacher/presentation/$presentationId/preview'
+      path: '/presentation/$presentationId/preview'
+      fullPath: '/teacher/presentation/$presentationId/preview'
+      preLoaderRoute: typeof TeacherPresentationPresentationIdPreviewRouteImport
+      parentRoute: typeof TeacherRoute
+    }
   }
 }
 
 interface TeacherRouteChildren {
   TeacherPrepRoute: typeof TeacherPrepRoute
+  TeacherPresentationPresentationIdPreviewRoute: typeof TeacherPresentationPresentationIdPreviewRoute
   TeacherSessionSessionIdPrepRoute: typeof TeacherSessionSessionIdPrepRoute
 }
 
 const TeacherRouteChildren: TeacherRouteChildren = {
   TeacherPrepRoute: TeacherPrepRoute,
+  TeacherPresentationPresentationIdPreviewRoute:
+    TeacherPresentationPresentationIdPreviewRoute,
   TeacherSessionSessionIdPrepRoute: TeacherSessionSessionIdPrepRoute,
 }
 
