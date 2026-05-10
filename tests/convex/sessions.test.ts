@@ -231,6 +231,12 @@ describe('sessions auth and participant identity', () => {
         isAnonymous: false,
       }),
     ).rejects.toThrow('Class is not active')
+    await expect(
+      student.mutation(api.sessions.joinSessionByCode, {
+        code,
+        displayName: 'Maya',
+      }),
+    ).rejects.toThrow('This class has ended')
   })
 
   it('restricts lifecycle controls to the owning teacher', async () => {

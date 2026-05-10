@@ -24,6 +24,33 @@ export function resolveJoinDisplayName(
   return undefined
 }
 
+export function resolveJoinErrorMessage(caught: unknown) {
+  const fallback = 'Could not join class'
+  if (!(caught instanceof Error)) return fallback
+
+  const uncaughtMatch = caught.message.match(
+    /Uncaught Error: ([\s\S]*?)(?:\s+at\s+handler|\s+Called by client|$)/,
+  )
+  const message = (uncaughtMatch?.[1] || caught.message).trim()
+
+  if (message.includes('This class has ended')) {
+    return 'This class has ended.'
+  }
+  if (message.includes('Session code has expired')) {
+    return 'This class code has expired.'
+  }
+  if (
+    message.includes('Class code not found') ||
+    message.includes('Session code is not active')
+  ) {
+    return 'Class code not found.'
+  }
+  if (message && !message.startsWith('[CONVEX')) {
+    return message
+  }
+  return fallback
+}
+
 export function defaultPathForRole(role: AccountRole) {
   return role === 'teacher' ? '/teacher' : '/join'
 }

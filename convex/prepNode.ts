@@ -3,6 +3,12 @@
 import { v } from 'convex/values'
 import { action } from './_generated/server'
 import { internal } from './_generated/api'
+import {
+  MAX_EXTRACTED_DOCUMENT_TEXT_CHARS,
+  formatBytes,
+  getPrepUploadLimit,
+} from './prepLimits'
+import { buildCappedSourceDocuments } from './prepPrompt'
 import type { Doc, Id } from './_generated/dataModel'
 import type { ActionCtx } from './_generated/server'
 import type { UserIdentity } from 'convex/server'
@@ -43,8 +49,6 @@ type PreparedImage = {
   dataUri: string
 }
 
-const MAX_LLM_CONTEXT = 55_000
-const MAX_DOCUMENT_TEXT = 140_000
 const DEFAULT_PILLARS_PREP_BRIEF =
   'Create the curriculum for a two hour class on pillar analysis. Include classic concepts of obedience, pillar analysis, how to dissect pillars, push vs pull from Gene Sharp, Popovic and Helvey. Include two Pillars case studies to teach in the pillars module: El Salvador 1944 and Norway 1942.'
 
@@ -61,7 +65,7 @@ function cleanText(text: string) {
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
-    .slice(0, MAX_DOCUMENT_TEXT)
+    .slice(0, MAX_EXTRACTED_DOCUMENT_TEXT_CHARS)
 }
 
 function safeJsonParse(value: string) {
@@ -283,6 +287,10 @@ async function loadPreparedImages(
   for (const document of imageDocs.slice(0, 12)) {
     const blob = await ctx.storage.get(document.storageId)
     if (!blob) continue
+    const limit = getPrepUploadLimit('image')
+    if (blob.size > limit) {
+      throw new Error(`image uploads are limited to ${formatBytes(limit)}`)
+    }
     images.push({
       fileName: document.fileName,
       dataUri: await blobToDataUri(blob),
@@ -357,6 +365,10 @@ async function openRouterJson<T>({
 }
 
 async function extractTextFromDocument(blob: Blob, fileName: string, mimeType: string) {
+  const limit = getPrepUploadLimit('document')
+  if (blob.size > limit) {
+    throw new Error(`document uploads are limited to ${formatBytes(limit)}`)
+  }
   const arrayBuffer = await blob.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
   const lower = fileName.toLowerCase()
@@ -447,10 +459,8 @@ export const generateCurriculum = action({
     if (!extractedDocs.length) {
       throw new Error('Extract at least one uploaded document first')
     }
-    const documentText = extractedDocs
-      .map((document) => `# ${document.fileName}\n${document.extractedText}`)
-      .join('\n\n')
-      .slice(0, MAX_LLM_CONTEXT)
+    const { documentText, sourceDocuments } =
+      buildCappedSourceDocuments(extractedDocs)
     const fallback = fallbackCurriculum({
       title: input.workspace.title,
       audience: input.workspace.audience,
@@ -466,10 +476,7 @@ export const generateCurriculum = action({
         workspace: input.workspace,
         teacherPrepBrief:
           input.workspace.prepBrief || DEFAULT_PILLARS_PREP_BRIEF,
-        sourceDocuments: extractedDocs.map((document) => ({
-          fileName: document.fileName,
-          text: document.extractedText,
-        })),
+        sourceDocuments,
       },
     })
     const content = normalizeCurriculum(result.output, fallback)

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   defaultPathForRole,
   requiredRoleForPath,
+  resolveJoinErrorMessage,
   resolveJoinDisplayName,
   resolvePostOnboardingPath,
 } from '../../src/lib/auth'
@@ -37,6 +38,24 @@ describe('resolveJoinDisplayName', () => {
 
   it('returns undefined instead of inventing a name', () => {
     expect(resolveJoinDisplayName('', null)).toBeUndefined()
+  })
+})
+
+describe('resolveJoinErrorMessage', () => {
+  it('extracts clean Convex errors from failed class joins', () => {
+    expect(
+      resolveJoinErrorMessage(
+        new Error(
+          '[CONVEX M(sessions:joinSessionByCode)] [Request ID: test] Server Error Uncaught Error: This class has ended at handler (../convex/sessions.ts:306:16) Called by client',
+        ),
+      ),
+    ).toBe('This class has ended.')
+  })
+
+  it('maps missing class codes to a short message', () => {
+    expect(resolveJoinErrorMessage(new Error('Class code not found'))).toBe(
+      'Class code not found.',
+    )
   })
 })
 

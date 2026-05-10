@@ -3,6 +3,11 @@ import type { UserIdentity } from 'convex/server'
 import { describe, expect, it } from 'vitest'
 
 import { api } from '../../convex/_generated/api'
+import {
+  MAX_LLM_DOCUMENT_CONTEXT_CHARS,
+  MAX_PREP_DOCUMENT_UPLOAD_BYTES,
+} from '../../convex/prepLimits'
+import { buildCappedSourceDocuments } from '../../convex/prepPrompt'
 import schema from '../../convex/schema'
 import { modules } from './test.setup'
 
@@ -161,5 +166,80 @@ describe('prep workspace auth', () => {
       workspaceId,
     })
     expect(workspace.prepBrief).toContain('El Salvador 1944')
+  })
+
+  it('hides prep workspaces once their class is deleted', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {})
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+
+    await teacher.mutation(api.sessions.deleteSession, { sessionId })
+
+    await expect(
+      teacher.query(api.prep.getWorkspace, { workspaceId }),
+    ).rejects.toThrow('Session not found')
+    await expect(
+      teacher.mutation(api.prep.updatePrepBrief, {
+        workspaceId,
+        prepBrief: 'This should no longer be editable.',
+      }),
+    ).rejects.toThrow('Session not found')
+    const mine = await teacher.query(api.prep.listMyWorkspaces, {})
+    expect(mine).toHaveLength(0)
+  })
+
+  it('rejects stored files that exceed prep upload limits', async () => {
+    const t = newTestBackend()
+    const teacher = t.withIdentity(teacherIdentity)
+    await onboard(t, teacherIdentity, 'teacher', 'Prep Trainer')
+    const { sessionId } = await teacher.mutation(api.sessions.createSession, {})
+    const { workspaceId } = await teacher.mutation(api.prep.createWorkspace, {
+      sessionId,
+    })
+    const storageId = await t.run(async (ctx) =>
+      ctx.storage.store(
+        new Blob([new Uint8Array(MAX_PREP_DOCUMENT_UPLOAD_BYTES + 1)], {
+          type: 'application/pdf',
+        }),
+      ),
+    )
+
+    await expect(
+      teacher.mutation(api.prep.saveUploadedDocument, {
+        workspaceId,
+        storageId,
+        kind: 'document',
+        fileName: 'too-large.pdf',
+        mimeType: 'application/pdf',
+        size: 1,
+      }),
+    ).rejects.toThrow('document uploads are limited')
+  })
+
+  it('caps source documents before building an LLM prompt', () => {
+    const { documentText, sourceDocuments } = buildCappedSourceDocuments([
+      {
+        fileName: 'one.txt',
+        extractedText: 'a'.repeat(MAX_LLM_DOCUMENT_CONTEXT_CHARS),
+      },
+      {
+        fileName: 'two.txt',
+        extractedText: 'b'.repeat(MAX_LLM_DOCUMENT_CONTEXT_CHARS),
+      },
+    ])
+
+    expect(documentText.length).toBeLessThanOrEqual(
+      MAX_LLM_DOCUMENT_CONTEXT_CHARS,
+    )
+    expect(sourceDocuments[0].text.length).toBeLessThan(
+      MAX_LLM_DOCUMENT_CONTEXT_CHARS,
+    )
+    expect(sourceDocuments.at(-1)?.text.length).toBeLessThan(
+      MAX_LLM_DOCUMENT_CONTEXT_CHARS,
+    )
   })
 })

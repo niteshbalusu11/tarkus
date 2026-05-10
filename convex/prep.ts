@@ -5,6 +5,7 @@ import {
   mutation,
   query,
 } from './_generated/server'
+import { formatBytes, getPrepUploadLimit } from './prepLimits'
 import { getUserProfileByTokenIdentifier } from './users'
 import type { Doc, Id } from './_generated/dataModel'
 import type { MutationCtx, QueryCtx } from './_generated/server'
@@ -49,6 +50,10 @@ async function assertTeacherOwnsWorkspace(
   if (workspace.teacherTokenIdentifier !== tokenIdentifier) {
     throw new Error('Unauthorized')
   }
+  if (!workspace.sessionId) {
+    throw new Error('Session not found')
+  }
+  await assertTeacherOwnsSession(ctx, workspace.sessionId, tokenIdentifier)
   return workspace
 }
 
@@ -65,6 +70,35 @@ async function assertTeacherOwnsSession(
     throw new Error('Unauthorized')
   }
   return session
+}
+
+function getAssetKind(args: {
+  kind?: 'document' | 'image'
+  mimeType: string
+}) {
+  return args.kind || (args.mimeType.startsWith('image/') ? 'image' : 'document')
+}
+
+async function assertStoredFileWithinLimit(
+  ctx: MutationCtx,
+  storageId: Id<'_storage'>,
+  kind: 'document' | 'image',
+  reportedSize: number,
+) {
+  if (!Number.isFinite(reportedSize) || reportedSize <= 0) {
+    throw new Error('File size is required')
+  }
+  const limit = getPrepUploadLimit(kind)
+  if (reportedSize > limit) {
+    throw new Error(`${kind} uploads are limited to ${formatBytes(limit)}`)
+  }
+  const metadata = await ctx.db.system.get('_storage', storageId)
+  if (!metadata) {
+    throw new Error('Uploaded file not found')
+  }
+  if (metadata.size > limit) {
+    throw new Error(`${kind} uploads are limited to ${formatBytes(limit)}`)
+  }
 }
 
 export const createWorkspace = mutation({
@@ -155,7 +189,23 @@ export const listMyWorkspaces = query({
       )
       .order('desc')
       .take(50)
-    return workspaces.filter((workspace) => workspace.sessionId)
+    const visibleWorkspaces = await Promise.all(
+      workspaces.map(async (workspace) => {
+        if (!workspace.sessionId) return null
+        const session = await ctx.db.get(workspace.sessionId)
+        if (
+          !session ||
+          session.status === 'deleted' ||
+          session.teacherTokenIdentifier !== identity.tokenIdentifier
+        ) {
+          return null
+        }
+        return workspace
+      }),
+    )
+    return visibleWorkspaces.filter(
+      (workspace): workspace is Doc<'prepWorkspaces'> => workspace !== null,
+    )
   },
 })
 
@@ -199,8 +249,8 @@ export const saveUploadedDocument = mutation({
       identity.tokenIdentifier,
     )
     const now = Date.now()
-    const kind =
-      args.kind || (args.mimeType.startsWith('image/') ? 'image' : 'document')
+    const kind = getAssetKind(args)
+    await assertStoredFileWithinLimit(ctx, args.storageId, kind, args.size)
     const documentId = await ctx.db.insert('prepDocuments', {
       workspaceId: args.workspaceId,
       teacherTokenIdentifier: identity.tokenIdentifier,

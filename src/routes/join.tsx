@@ -17,7 +17,7 @@ import {
 } from '../components/ui/card'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-import { resolveJoinDisplayName } from '../lib/auth'
+import { resolveJoinDisplayName, resolveJoinErrorMessage } from '../lib/auth'
 
 export const Route = createFileRoute('/join')({
   component: JoinRoute,
@@ -54,9 +54,7 @@ function JoinClass() {
         params: { sessionId: result.sessionId },
       })
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : 'Could not join class',
-      )
+      setError(resolveJoinErrorMessage(caught))
     } finally {
       setIsJoining(false)
     }

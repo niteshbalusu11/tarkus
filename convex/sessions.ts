@@ -302,7 +302,10 @@ export const joinSessionByCode = mutation({
     )
 
     if (!session) {
-      throw new Error('Session code is not active')
+      if (sessions.some((candidate) => candidate.status === 'ended')) {
+        throw new Error('This class has ended')
+      }
+      throw new Error('Class code not found')
     }
     if (session.expiresAt < Date.now()) {
       throw new Error('Session code has expired')
