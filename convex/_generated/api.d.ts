@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as curriculumSkill from "../curriculumSkill.js";
 import type * as prep from "../prep.js";
 import type * as prepLimits from "../prepLimits.js";
 import type * as prepNode from "../prepNode.js";
@@ -22,6 +23,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  curriculumSkill: typeof curriculumSkill;
   prep: typeof prep;
   prepLimits: typeof prepLimits;
   prepNode: typeof prepNode;

@@ -9,6 +9,7 @@ import {
   getPrepUploadLimit,
 } from './prepLimits'
 import { buildCappedSourceDocuments } from './prepPrompt'
+import { CURRICULUM_SKILL_PROMPT } from './curriculumSkill'
 import type { Doc, Id } from './_generated/dataModel'
 import type { ActionCtx } from './_generated/server'
 import type { UserIdentity } from 'convex/server'
@@ -54,6 +55,10 @@ const DEFAULT_PILLARS_PREP_BRIEF =
   'Create the curriculum for a two hour class on pillar analysis. Include classic concepts of obedience, pillar analysis, how to dissect pillars, push vs pull from Gene Sharp, Popovic and Helvey. Include two Pillars case studies to teach in the pillars module: El Salvador 1944 and Norway 1942.'
 
 export const MAX_PRESENTATION_SLIDES = 40
+
+function withCurriculumSkill(corePrompt: string) {
+  return `You have access to curriculum design guidance from the FUB Discussion Guide framework (SNVA Pillars of Support module). Treat the embedded stages (frame, story, cases, design) as the source of truth for audience analysis, pedagogical sequence, case-study selection, and slide design. Adapt the guidance to the inputs you are given; do not copy text verbatim. Ignore any stage-routing instructions ("ask the trainer", "create session.yaml", "lock this stage") because you are running as a single-shot generator and have no interactive loop with the trainer.\n\n<curriculum_skill>\n${CURRICULUM_SKILL_PROMPT}\n</curriculum_skill>\n\n${corePrompt}`
+}
 
 function requireIdentity(identity: UserIdentity | null) {
   if (!identity) {
@@ -367,11 +372,13 @@ async function openRouterJson<T>({
   user,
   fallback,
   imageInputs = [],
+  maxTokens,
 }: {
   system: string
   user: unknown
   fallback: T
   imageInputs?: Array<PreparedImage>
+  maxTokens?: number
 }): Promise<{ output: T; error?: string }> {
   const apiKey = process.env.OPENROUTER_API_KEY
   if (!apiKey) {
@@ -407,6 +414,7 @@ async function openRouterJson<T>({
       body: JSON.stringify({
         model: process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini',
         response_format: { type: 'json_object' },
+        max_tokens: maxTokens ?? 8000,
         messages: [
           { role: 'system', content: system },
           { role: 'user', content: userContent },
@@ -545,8 +553,9 @@ export const generateCurriculum = action({
     })
     const result = await openRouterJson<unknown>({
       fallback,
-      system:
-        'You are TARKUS, a teacher prep assistant for strategic nonviolence training. Generate a polished, teacher-editable curriculum from uploaded source documents and the teacher prep brief. Return JSON only with shape: {"title":"string","audience":"string","durationMinutes":number,"learningObjectives":["string"],"agenda":[{"title":"string","durationMinutes":number,"teachingNotes":"string","activity":"string","discussionPrompts":["string"]}],"keyConcepts":["string"],"materialsNeeded":["string"],"assessmentIdeas":["string"],"teacherNotes":"string"}. Prioritize the teacher prep brief when it is specific. For this demo, pillar analysis should be central: obedience, sources of power, dissecting pillars, push vs pull, Gene Sharp, Popovic, Helvey, El Salvador 1944, and Norway 1942. Keep it classroom practical, clear, and safe. Do not invent citations. Do not give tactical operational advice; focus on teaching structure.',
+      system: withCurriculumSkill(
+        'You are TARKUS, a teacher prep assistant for strategic nonviolence training. Generate a polished, teacher-editable curriculum from uploaded source documents and the teacher prep brief. Return JSON only with shape: {"title":"string","audience":"string","durationMinutes":number,"learningObjectives":["string"],"agenda":[{"title":"string","durationMinutes":number,"teachingNotes":"string","activity":"string","discussionPrompts":["string"]}],"keyConcepts":["string"],"materialsNeeded":["string"],"assessmentIdeas":["string"],"teacherNotes":"string"}. Prioritize the teacher prep brief when it is specific. For this demo, pillar analysis should be central: obedience, sources of power, dissecting pillars, push vs pull, Gene Sharp, Popovic, Helvey, El Salvador 1944, and Norway 1942. Each agenda section\'s teachingNotes must be substantive — at least 6 sentences (about 120-200 words) — and walk the teacher through: how to open the segment, the key concepts to introduce in teaching order, one or two concrete classroom-ready examples or contrasts, the facilitator move (board diagram, sorting activity, named worksheet step), and the bridge into the next section. The activity field, when present, should describe the exact classroom activity in 2-4 sentences (grouping, materials, time-boxing, output expected). discussionPrompts should be 2-4 specific prompts per section. Keep it classroom practical, clear, and safe. Do not invent citations. Do not give tactical operational advice; focus on teaching structure.',
+      ),
       user: {
         workspace: input.workspace,
         teacherPrepBrief:
@@ -617,8 +626,9 @@ export const refineCurriculum = action({
     )
     const result = await openRouterJson<unknown>({
       fallback,
-      system:
-        'You are TARKUS, a teacher prep assistant. Revise the existing curriculum according to the teacher instruction while preserving the class prep brief. Return the full updated curriculum JSON only, preserving this shape: {"title":"string","audience":"string","durationMinutes":number,"learningObjectives":["string"],"agenda":[{"title":"string","durationMinutes":number,"teachingNotes":"string","activity":"string","discussionPrompts":["string"]}],"keyConcepts":["string"],"materialsNeeded":["string"],"assessmentIdeas":["string"],"teacherNotes":"string"}. Keep the result practical and teacher-editable.',
+      system: withCurriculumSkill(
+        'You are TARKUS, a teacher prep assistant. Revise the existing curriculum according to the teacher instruction while preserving the class prep brief. Return the full updated curriculum JSON only, preserving this shape: {"title":"string","audience":"string","durationMinutes":number,"learningObjectives":["string"],"agenda":[{"title":"string","durationMinutes":number,"teachingNotes":"string","activity":"string","discussionPrompts":["string"]}],"keyConcepts":["string"],"materialsNeeded":["string"],"assessmentIdeas":["string"],"teacherNotes":"string"}. Preserve the existing depth: each agenda section\'s teachingNotes should remain at least 6 sentences (around 120-200 words) covering opening move, key concepts in teaching order, one or two concrete examples or contrasts, the facilitator move, and the bridge to the next section. The activity field, when present, stays specific (grouping, materials, time-boxing, output). Only reduce detail if the teacher explicitly asks for compression. Keep the result practical and teacher-editable.',
+      ),
       user: {
         currentCurriculum: input.latestCurriculum.content,
         teacherPrepBrief:
@@ -680,7 +690,9 @@ export const generatePresentation = action({
     const fallback = slideSpecFromCurriculum(curriculum)
     const result = await openRouterJson<unknown>({
       fallback,
-      system: `You are TARKUS, creating a classroom PowerPoint outline from a finalized curriculum. Return JSON only with shape {"title":"string","slides":[{"id":"stable-slide-id","type":"title|concept|discussion|activity|summary","title":"string","bullets":["string"],"speakerNotes":"string","imageFileName":"optional exact uploaded image filename"}]}. Use concise slide text and richer speaker notes. Generate 10-14 slides by default, unless the teacher prep context clearly calls for a different count. Never exceed ${MAX_PRESENTATION_SLIDES} slides. Use stable unique id values for every slide. If uploaded images are useful, inspect them and assign an exact imageFileName from uploadedImages to the most relevant slides. For this demo, the deck should emphasize pillar analysis, obedience, dissecting pillars, push vs pull, Gene Sharp, Popovic, Helvey, El Salvador 1944, and Norway 1942.`,
+      system: withCurriculumSkill(
+        `You are TARKUS, creating a classroom PowerPoint outline from a finalized curriculum. Treat the curriculum-skill design and full-session mode stages as the authority on deck structure, not a generic slide outline. Return JSON only with shape {"title":"string","slides":[{"id":"stable-slide-id","type":"title|concept|discussion|activity|summary","title":"string","bullets":["string"],"speakerNotes":"string","imageFileName":"optional exact uploaded image filename"}]}. Use stable unique id values for every slide (e.g., "title-1", "block-2-five-supplies", "case-norway-1942") so the teacher can edit individual slides later.\n\nDeck structure must follow the skill's seven blocks for a full session: (1) Power Theory and Sharp's quote, (2) What Pillars Supply (obedience, resources, skills, enforcement, legitimacy), (3) The Pillars Model and concentric circles, (4) Strategic Analysis with Helvey's three dimensions (importance, loyalty, vulnerability), (5) What Pillars Are NOT — the four anti-patterns, one slide each, revealed in sequence, (6) Case Studies (El Salvador 1944 and Norway 1942), (7) Exercise and closing. Open with a title slide and finish with a closing slide that carries the arrow + closing question.\n\nAim for 18-30 slides for a 90-120 minute session, fewer when the curriculum's durationMinutes is shorter; never exceed ${MAX_PRESENTATION_SLIDES} slides. Map skill slide types onto our 5 enum values: title type for title slides, section breaks, and the closing slide; concept type for concept slides, quote slides, diagram slides, contrast slides, table or list slides, and grid slides; discussion type for any prompt-only slide; activity type for exercise instruction slides; summary type for the wrap-up takeaway.\n\nTraining-deck text density: slide text is sparse (the trainer talks; the slide anchors). Concept slides: term + 1-2 sentence definition. Quote slides: just the quote and attribution in bullets. Discussion slides: just the question, no suggested answers. Contrast slides: pair the wrong-vs-right examples in two bullets ("the economy" → "CAINCO in Santa Cruz"). Exercise slides: numbered, complete steps that participants can read without the trainer repeating them. Closing: the arrow + the closing question.\n\nspeakerNotes is where the substance lives. Every slide needs facilitator notes covering: a one-line opening cue (what the trainer says or asks), the key concept or move for the slide, an engagement instruction when relevant (pair discussion, show of hands, sorting activity), an explicit timing cue ("[2 min]"), and a transition prompt to the next slide. Do not put the explanation on the slide and leave the notes blank.\n\nIf uploaded images are useful, inspect them and assign an exact imageFileName from uploadedImages to the most relevant slides — Sharp/palace-on-pillars diagram, concentric circles, case-study photos. Do not fabricate citations. Keep the deck classroom practical, safe, and analytical (no tactical operational instruction).`,
+      ),
       user: {
         curriculum,
         teacherPrepBrief:
@@ -850,7 +862,9 @@ export const refinePresentation = action({
     }
     const result = await openRouterJson<unknown>({
       fallback: currentSlideSpec,
-      system: `You are TARKUS, editing a classroom PowerPoint outline for strategic nonviolence training. Return the full updated deck as JSON only with shape {"title":"string","slides":[{"id":"stable-slide-id","type":"title|concept|discussion|activity|summary","title":"string","bullets":["string"],"speakerNotes":"string","imageFileName":"optional exact uploaded image filename"}]}. Apply the teacher instruction directly to the slide deck. Preserve existing slide ids exactly for slides that still exist; create stable unique ids only for new slides. Preserve the deck structure unless the teacher asks to add, remove, or reorder slides. If the teacher requests a slide count, honor it as closely as possible up to ${MAX_PRESENTATION_SLIDES} slides. Use concise slide text and richer speaker notes. Only use imageFileName values from the uploadedImages list. Preserve existing imageFileName placements unless the teacher explicitly asks to move or remove images. If moving images, move the exact existing filename to the requested slide. If removing an image, set imageFileName to an empty string for that slide.`,
+      system: withCurriculumSkill(
+        `You are TARKUS, editing a classroom PowerPoint outline for strategic nonviolence training. The curriculum-skill design and full-session mode stages remain the authority on deck shape. Return the full updated deck as JSON only with shape {"title":"string","slides":[{"id":"stable-slide-id","type":"title|concept|discussion|activity|summary","title":"string","bullets":["string"],"speakerNotes":"string","imageFileName":"optional exact uploaded image filename"}]}. Preserve existing slide ids exactly for slides that still exist; create stable unique ids only for new slides.\n\nApply the teacher instruction directly to the slide deck. Preserve the seven-block structure (Power Theory → Pillars Supply → Model → Helvey → What Pillars Are NOT → Case Studies → Exercise/Closing) and any must-have slides (Sharp quote, five supplies, concentric circles, Helvey dimensions, four anti-pattern contrast slides, exercise with the three numbered steps, closing) unless the teacher explicitly asks to remove them.\n\nIf the teacher requests a specific slide count, honor it as closely as possible up to ${MAX_PRESENTATION_SLIDES} slides. Otherwise keep the deck in the 16-30 slide range; do not compress or prune unless asked. Maintain training-deck text density: sparse slide text, substantive speakerNotes that include opening cue, key move, engagement instruction when relevant, timing cue, and transition. Map skill slide types onto our 5 enum values as in initial generation (title for titles/section breaks/closing, concept for concept/quote/diagram/contrast/table/grid, discussion for prompt-only, activity for exercise, summary for wrap-up).\n\nOnly use imageFileName values from the uploadedImages list. Preserve existing imageFileName placements unless the teacher explicitly asks to move or remove images. If moving images, move the exact existing filename to the requested slide. If removing an image, set imageFileName to an empty string for that slide. When adding new image placements, prefer Sharp diagram, concentric-circles, and case-study context slides. Do not fabricate citations or give tactical operational instruction.`,
+      ),
       user: {
         currentSlideSpec,
         teacherInstruction: instruction,

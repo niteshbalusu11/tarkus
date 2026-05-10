@@ -12,7 +12,8 @@
     "test": "vitest run",
     "lint": "eslint",
     "format": "prettier --write . && eslint --fix",
-    "check": "prettier --check ."
+    "check": "prettier --check .",
+    "sync:curriculum-skill": "node scripts/sync-curriculum-skill.mjs"
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.61.3",
