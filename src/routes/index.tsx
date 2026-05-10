@@ -36,12 +36,11 @@ function App() {
           <p className="home-kicker">Strategic nonviolence training</p>
           <h1>
             TARKUS
-            <span>Practice power before the room gets loud.</span>
+            <span>Learn the science of nonviolence.</span>
           </h1>
           <p className="home-deck">
-            A live classroom surface for teachers running Pillars of Support
-            exercises: short-code entry, student chat, real-time class signals,
-            and teacher-only AI synthesis.
+            A live classroom space for students to join, think together, and
+            practice how organized people create change.
           </p>
           <div className="home-actions" aria-label="Primary actions">
             <Button asChild size="lg" className="home-primary-action">
