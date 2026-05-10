@@ -99,4 +99,87 @@ export default defineSchema({
       'kind',
       'createdAt',
     ]),
+  prepWorkspaces: defineTable({
+    sessionId: v.optional(v.id('sessions')),
+    teacherTokenIdentifier: v.string(),
+    title: v.string(),
+    audience: v.optional(v.string()),
+    durationMinutes: v.optional(v.number()),
+    prepBrief: v.optional(v.string()),
+    status: v.union(
+      v.literal('draft'),
+      v.literal('curriculum_generated'),
+      v.literal('finalized'),
+      v.literal('deck_generated'),
+      v.literal('failed'),
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_sessionId', ['sessionId'])
+    .index('by_teacherTokenIdentifier_and_updatedAt', [
+      'teacherTokenIdentifier',
+      'updatedAt',
+    ])
+    .index('by_teacherTokenIdentifier_and_status', [
+      'teacherTokenIdentifier',
+      'status',
+    ]),
+  prepDocuments: defineTable({
+    workspaceId: v.id('prepWorkspaces'),
+    teacherTokenIdentifier: v.string(),
+    storageId: v.id('_storage'),
+    kind: v.optional(v.union(v.literal('document'), v.literal('image'))),
+    fileName: v.string(),
+    mimeType: v.string(),
+    size: v.number(),
+    status: v.union(
+      v.literal('uploaded'),
+      v.literal('extracting'),
+      v.literal('extracted'),
+      v.literal('failed'),
+    ),
+    extractedText: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_workspaceId', ['workspaceId'])
+    .index('by_workspaceId_and_status', ['workspaceId', 'status']),
+  curricula: defineTable({
+    workspaceId: v.id('prepWorkspaces'),
+    teacherTokenIdentifier: v.string(),
+    version: v.number(),
+    status: v.union(v.literal('draft'), v.literal('finalized')),
+    content: v.any(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_workspaceId_and_version', ['workspaceId', 'version'])
+    .index('by_workspaceId_and_updatedAt', ['workspaceId', 'updatedAt']),
+  curriculumMessages: defineTable({
+    workspaceId: v.id('prepWorkspaces'),
+    teacherTokenIdentifier: v.string(),
+    role: v.union(v.literal('teacher'), v.literal('assistant')),
+    body: v.string(),
+    createdAt: v.number(),
+  }).index('by_workspaceId_and_createdAt', ['workspaceId', 'createdAt']),
+  presentations: defineTable({
+    workspaceId: v.id('prepWorkspaces'),
+    teacherTokenIdentifier: v.string(),
+    curriculumId: v.id('curricula'),
+    status: v.union(
+      v.literal('generating'),
+      v.literal('ready'),
+      v.literal('failed'),
+    ),
+    slideSpec: v.any(),
+    storageId: v.optional(v.id('_storage')),
+    fileName: v.string(),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_workspaceId_and_createdAt', ['workspaceId', 'createdAt'])
+    .index('by_workspaceId_and_status', ['workspaceId', 'status']),
 })

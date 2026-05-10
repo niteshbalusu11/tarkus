@@ -258,6 +258,34 @@ Todos:
 Acceptance:
 
 - [x] One click can populate a session.
+
+## Phase 8: Teacher Prep Mode
+
+Add a teacher-only preparation workflow for generating curriculum and slides
+from uploaded source material.
+
+Todos:
+
+- [x] Add Convex tables for class prep, uploaded documents, curricula, revision messages, and generated presentations.
+- [x] Attach prep records to a real `sessions` class record.
+- [x] Add server-side teacher-role checks and class/workspace ownership checks.
+- [x] Add upload URL and document registration functions.
+- [x] Add Node actions for PDF/DOCX/TXT extraction.
+- [x] Add OpenRouter-backed curriculum generation with local fallback output.
+- [x] Add OpenRouter-backed curriculum refinement chat.
+- [x] Add editable curriculum route at `/teacher/session/$sessionId/prep`.
+- [x] Remove standalone prep creation from `/teacher/prep`; prep is opened from the selected class in `/teacher`.
+- [x] Add PPTX generation and Convex storage download links.
+- [x] Add class-scoped prep authorization tests.
+- [x] Add a return path from class prep back to the same live dashboard.
+- [ ] Browser-test the full class prep -> upload -> generate -> edit -> refine -> PPTX flow with real teacher auth.
+
+Acceptance:
+
+- [x] Students cannot access prep functions.
+- [x] Teachers cannot read another teacher's class prep.
+- [x] Teacher can create prep only from an owned class/session.
+- [x] Curriculum renders as a polished teacher-facing document, not raw JSON.
 - [x] Seed data looks realistic.
 - [x] Demo still works with real student input after seeding.
 

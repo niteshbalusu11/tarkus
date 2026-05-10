@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as prep from "../prep.js";
+import type * as prepNode from "../prepNode.js";
 import type * as sessions from "../sessions.js";
 import type * as users from "../users.js";
 
@@ -18,6 +20,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  prep: typeof prep;
+  prepNode: typeof prepNode;
   sessions: typeof sessions;
   users: typeof users;
 }>;

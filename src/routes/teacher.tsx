@@ -1,12 +1,19 @@
 import { useMemo, useState } from 'react'
-import { createFileRoute } from '@tanstack/react-router'
+import {
+  Outlet,
+  createFileRoute,
+  useLocation,
+  useNavigate,
+} from '@tanstack/react-router'
 import { useAction, useMutation, useQuery } from 'convex/react'
 import {
   AlertTriangle,
+  BookOpenText,
   Bot,
   CircleDot,
   Clock,
   Copy,
+  GraduationCap,
   Flag,
   LayoutDashboard,
   MessageSquareText,
@@ -57,16 +64,19 @@ export const Route = createFileRoute('/teacher')({
 type TeacherSession = Doc<'sessions'>
 
 function TeacherRoute() {
+  const location = useLocation()
   return (
     <AuthGate requiredRole="teacher" title="Sign in as teacher">
-      <TeacherDashboard />
+      {location.pathname === '/teacher' ? <TeacherDashboard /> : <Outlet />}
     </AuthGate>
   )
 }
 
 function TeacherDashboard() {
   const sessions = useQuery(api.sessions.listMyTeacherSessions)
+  const navigate = useNavigate()
   const createSession = useMutation(api.sessions.createSession)
+  const createPrepWorkspace = useMutation(api.prep.createWorkspace)
   const startSession = useMutation(api.sessions.startSession)
   const stopSession = useMutation(api.sessions.stopSession)
   const endSession = useMutation(api.sessions.endSession)
@@ -78,7 +88,18 @@ function TeacherDashboard() {
   const [busyAction, setBusyAction] = useState<string | null>(null)
   const [endDialogOpen, setEndDialogOpen] = useState(false)
 
-  const activeSessionId = selectedSessionId || sessions?.[0]?._id || null
+  const sessionIdFromUrl =
+    typeof window === 'undefined'
+      ? null
+      : (new URLSearchParams(window.location.search).get(
+          'sessionId',
+        ) as Id<'sessions'> | null)
+  const urlSessionId =
+    sessionIdFromUrl && sessions?.some((item) => item._id === sessionIdFromUrl)
+      ? sessionIdFromUrl
+      : null
+  const activeSessionId =
+    selectedSessionId || urlSessionId || sessions?.[0]?._id || null
   const session = useQuery(
     api.sessions.getTeacherSession,
     activeSessionId ? { sessionId: activeSessionId } : 'skip',
@@ -116,6 +137,20 @@ function TeacherDashboard() {
     try {
       await seedDemo({ sessionId: activeSessionId })
       await analyzeSession({ sessionId: activeSessionId })
+    } finally {
+      setBusyAction(null)
+    }
+  }
+
+  async function handlePrepClass() {
+    if (!activeSessionId) return
+    setBusyAction('prep')
+    try {
+      await createPrepWorkspace({ sessionId: activeSessionId })
+      await navigate({
+        to: '/teacher/session/$sessionId/prep',
+        params: { sessionId: activeSessionId },
+      })
     } finally {
       setBusyAction(null)
     }
@@ -180,16 +215,22 @@ function TeacherDashboard() {
   if (!activeSessionId || !session) {
     return (
       <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-4 py-10">
-        <Card className="mx-auto flex min-h-[68vh] max-w-4xl flex-col items-center justify-center border-dashed px-6 text-center">
+        <section className="mx-auto w-full max-w-7xl space-y-5">
+          <TeacherHubHeader
+            busyAction={busyAction}
+            sessionCount={sessions.length}
+            onCreate={handleCreateSession}
+          />
+          <Card className="flex min-h-[58vh] flex-col items-center justify-center border-dashed px-6 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <LayoutDashboard className="h-6 w-6" />
           </div>
           <h1 className="mt-6 font-serif text-3xl font-semibold tracking-tight text-foreground">
-            Start a live class
+            Create a class
           </h1>
           <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">
-            Create one session code for the room. Students authenticate, join
-            with the code, chat, and submit the Pillars exercise.
+            One class holds both prep and live mode. Build the curriculum first,
+            then start the room when students are ready to join.
           </p>
           <Button
             className="mt-7"
@@ -197,9 +238,10 @@ function TeacherDashboard() {
             onClick={handleCreateSession}
           >
             <Play className="h-4 w-4" />
-            New live session
+            New class
           </Button>
-        </Card>
+          </Card>
+        </section>
       </main>
     )
   }
@@ -210,46 +252,57 @@ function TeacherDashboard() {
 
   return (
     <main className="min-h-[calc(100vh-8rem)] bg-[var(--background)] px-4 py-6">
-      <section className="mx-auto grid w-full max-w-7xl gap-4 xl:grid-cols-[1fr_360px]">
-        <div className="space-y-4">
-          {sessions.length > 1 ? (
-            <SessionPicker
-              sessions={sessions}
-              selectedSessionId={activeSessionId}
-              onSelect={setSelectedSessionId}
-            />
-          ) : null}
-          <SessionHeader
-            code={session.code}
-            status={session.status}
-            expiresAt={session.expiresAt}
-            participantCount={participants?.length || 0}
-            submissionCount={submissions?.length || 0}
-            busyAction={busyAction}
-            onStart={handleStart}
-            onStop={handleStop}
-            onRequestEnd={() => setEndDialogOpen(true)}
-            onAnalyze={handleAnalyze}
-            onSeed={handleSeedAndAnalyze}
-            onDelete={handleDelete}
+      <section className="mx-auto w-full max-w-7xl space-y-4">
+        <TeacherHubHeader
+          busyAction={busyAction}
+          sessionCount={sessions.length}
+          onCreate={handleCreateSession}
+        />
+        <div className="grid gap-4 xl:grid-cols-[320px_minmax(0,1fr)]">
+          <SessionPicker
+            sessions={sessions}
+            selectedSessionId={activeSessionId}
+            onSelect={setSelectedSessionId}
           />
-          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-            <AiPanel
-              analysis={analysis}
-              error={latestAnalysis?.error}
-              analyzedSubmissionCount={
-                latestAnalysis?.inputCursor.submissionCount
-              }
-              currentSubmissionCount={submissions?.length || 0}
+          <div className="space-y-4">
+            <SessionHeader
+              title={session.title || 'Pillars of Support Live Session'}
+              code={session.code}
+              status={session.status}
+              expiresAt={session.expiresAt}
+              participantCount={participants?.length || 0}
+              submissionCount={submissions?.length || 0}
+              busyAction={busyAction}
+              onStart={handleStart}
+              onStop={handleStop}
+              onRequestEnd={() => setEndDialogOpen(true)}
+              onAnalyze={handleAnalyze}
+              onSeed={handleSeedAndAnalyze}
+              onDelete={handleDelete}
+              onPrep={handlePrepClass}
             />
-            <PillarsPanel submissions={submissions || []} />
+            <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
+              <div className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+                  <AiPanel
+                    analysis={analysis}
+                    error={latestAnalysis?.error}
+                    analyzedSubmissionCount={
+                      latestAnalysis?.inputCursor.submissionCount
+                    }
+                    currentSubmissionCount={submissions?.length || 0}
+                  />
+                  <PillarsPanel submissions={submissions || []} />
+                </div>
+              </div>
+
+              <aside className="space-y-4">
+                <RosterPanel participants={participants || []} />
+                <ChatPanel messages={messages || []} />
+              </aside>
+            </div>
           </div>
         </div>
-
-        <aside className="space-y-4">
-          <RosterPanel participants={participants || []} />
-          <ChatPanel messages={messages || []} />
-        </aside>
       </section>
       <Dialog open={endDialogOpen} onOpenChange={setEndDialogOpen}>
         <DialogContent>
@@ -277,6 +330,49 @@ function TeacherDashboard() {
         </DialogContent>
       </Dialog>
     </main>
+  )
+}
+
+function TeacherHubHeader({
+  busyAction,
+  sessionCount,
+  onCreate,
+}: {
+  busyAction: string | null
+  sessionCount: number
+  onCreate: () => void
+}) {
+  return (
+    <Card className="overflow-hidden border-[var(--line)] bg-[var(--surface-strong)] shadow-[0_18px_54px_rgba(28,28,28,0.06)]">
+      <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--charcoal)] text-white">
+            <GraduationCap className="h-5 w-5" />
+          </div>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--amber-deep)]">
+              Teacher dashboard
+            </p>
+            <h1 className="mt-1 font-serif text-3xl leading-tight text-[var(--charcoal)]">
+              Classes
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-[var(--charcoal-soft)]">
+              Create a class once, prep it, then start live mode from the same
+              selected class.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary" className="h-9 px-3">
+            {sessionCount} {sessionCount === 1 ? 'class' : 'classes'}
+          </Badge>
+          <Button disabled={busyAction === 'create'} onClick={onCreate}>
+            <Play className="h-4 w-4" />
+            New class
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -333,8 +429,14 @@ function SessionPicker({
   onSelect: (sessionId: Id<'sessions'>) => void
 }) {
   return (
-    <Card>
-      <CardContent className="flex gap-2 overflow-x-auto p-3">
+    <Card className="h-fit border-[var(--line)]">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <LayoutDashboard className="h-4 w-4 text-[var(--amber-deep)]" />
+          Class list
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2 p-3 pt-0">
         {sessions.map((session) => {
           const meta = getSessionStatusMeta(session.status)
           const isSelected = session._id === selectedSessionId
@@ -342,7 +444,7 @@ function SessionPicker({
             <button
               key={session._id}
               className={[
-                'min-w-56 rounded-lg border px-3 py-2 text-left transition-colors',
+                'w-full rounded-lg border px-3 py-3 text-left transition-colors',
                 isSelected
                   ? 'border-primary bg-primary/5'
                   : 'border-[var(--line)] bg-background hover:bg-muted/60',
@@ -353,7 +455,7 @@ function SessionPicker({
               <span className="block truncate text-sm font-semibold text-foreground">
                 {session.title || 'Pillars class'}
               </span>
-              <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span className="font-mono tracking-[0.12em]">
                   {session.code}
                 </span>
@@ -368,6 +470,7 @@ function SessionPicker({
 }
 
 function SessionHeader({
+  title,
   code,
   status,
   expiresAt,
@@ -380,7 +483,9 @@ function SessionHeader({
   onAnalyze,
   onSeed,
   onDelete,
+  onPrep,
 }: {
+  title: string
   code: string
   status: TeacherSession['status']
   expiresAt: number
@@ -393,6 +498,7 @@ function SessionHeader({
   onAnalyze: () => void
   onSeed: () => void
   onDelete: () => void
+  onPrep: () => void
 }) {
   const expires = new Date(expiresAt).toLocaleTimeString([], {
     hour: 'numeric',
@@ -418,6 +524,9 @@ function SessionHeader({
                 Expires {expires}
               </Badge>
             </div>
+            <h2 className="mt-3 font-serif text-3xl leading-tight text-[var(--charcoal)]">
+              {title}
+            </h2>
             <div className="mt-3 flex flex-wrap items-end gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -438,7 +547,8 @@ function SessionHeader({
               </Button>
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              {statusMeta.description}
+              {statusMeta.description} Use prep for curriculum and slides, then
+              run the live room here.
             </p>
           </div>
 
@@ -449,6 +559,14 @@ function SessionHeader({
               label="submitted"
               value={submissionCount}
             />
+            <Button
+              variant="outline"
+              disabled={busyAction === 'prep'}
+              onClick={onPrep}
+            >
+              <BookOpenText className="h-4 w-4" />
+              Open prep
+            </Button>
             {canStart ? (
               <Button disabled={busyAction === 'start'} onClick={onStart}>
                 <Play className="h-4 w-4" />
